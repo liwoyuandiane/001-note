@@ -3,3 +3,8 @@
 ```shell
 wget -N https://raw.githubusercontent.com/liwoyuandiane/001-note/main/autodisk.sh && chmod +x autodisk.sh && bash autodisk.sh
 ```
+
+### cfddns脚本
+```shell
+wget -N https://raw.githubusercontent.com/liwoyuandiane/001-note/main/cfddns.sh && chmod+x cfddns.sh && bash cfddns.sh
+```
