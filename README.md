@@ -6,5 +6,5 @@ wget -N https://raw.githubusercontent.com/liwoyuandiane/001-note/main/autodisk.s
 
 ### cfddns脚本
 ```shell
-wget -N https://raw.githubusercontent.com/liwoyuandiane/001-note/main/cfddns.sh && chmod+x cfddns.sh && bash cfddns.sh
+wget -N https://raw.githubusercontent.com/liwoyuandiane/001-note/main/cfddns.sh && chmod +x cfddns.sh && bash cfddns.sh
 ```
