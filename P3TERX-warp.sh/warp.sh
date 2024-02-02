@@ -304,7 +304,7 @@ Print_Delimiter() {
 }
 
 Install_wgcf() {
-    curl -fsSL https://github.xianyang.cf/https://raw.githubusercontent.com/liwoyuandiane/001-note/CF%E7%9B%B8%E5%85%B3/P3TERX-warp.sh/wgcf.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/CF%E7%9B%B8%E5%85%B3/P3TERX-warp.sh/wgcf.sh | bash
 }
 
 Uninstall_wgcf() {
@@ -425,11 +425,11 @@ Install_WireGuardTools() {
 Install_WireGuardGo() {
     case ${SysInfo_Virt} in
     openvz | lxc*)
-        curl -fsSL https://github.xianyang.cf/https://raw.githubusercontent.com/liwoyuandiane/001-note/CF%E7%9B%B8%E5%85%B3/P3TERX-warp.sh/wireguard-go.sh | bash
+        curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/CF%E7%9B%B8%E5%85%B3/P3TERX-warp.sh//wireguard-go.sh | bash
         ;;
     *)
         if [[ ${SysInfo_Kernel_Ver_major} -lt 5 || ${SysInfo_Kernel_Ver_minor} -lt 6 ]]; then
-            curl -fsSL https://github.xianyang.cf/https://raw.githubusercontent.com/liwoyuandiane/001-note/CF%E7%9B%B8%E5%85%B3/P3TERX-warp.sh/wireguard-go.sh | bash
+            curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/CF%E7%9B%B8%E5%85%B3/P3TERX-warp.sh//wireguard-go.sh | bash
         fi
         ;;
     esac
@@ -1145,7 +1145,7 @@ Print_Usage() {
 Cloudflare WARP Installer [${shVersion}]
 
 USAGE:
-    bash <(curl -fsSL https://github.xianyang.cf/https://raw.githubusercontent.com/liwoyuandiane/001-note/CF%E7%9B%B8%E5%85%B3/P3TERX-warp.sh/warp.sh) [SUBCOMMAND]
+    bash <(curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/CF%E7%9B%B8%E5%85%B3/P3TERX-warp.sh/warp.sh) [SUBCOMMAND]
 
 SUBCOMMANDS:
     install         Install Cloudflare WARP Official Linux Client
