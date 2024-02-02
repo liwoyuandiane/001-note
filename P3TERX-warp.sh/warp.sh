@@ -304,7 +304,7 @@ Print_Delimiter() {
 }
 
 Install_wgcf() {
-    curl -fsSL https://github.xianyang.cf/https://raw.githubusercontent.com/P3TERX/script/master/wgcf.sh | bash
+    curl -fsSL https://github.xianyang.cf/https://raw.githubusercontent.com/liwoyuandiane/001-note/CF%E7%9B%B8%E5%85%B3/P3TERX-warp.sh/wgcf.sh | bash
 }
 
 Uninstall_wgcf() {
@@ -317,7 +317,7 @@ Register_WARP_Account() {
         log INFO "Cloudflare WARP Account registration in progress..."
         yes | wgcf register
         sleep 5
-    done
+    已完成
 }
 
 Generate_WGCF_Profile() {
@@ -325,7 +325,7 @@ Generate_WGCF_Profile() {
         Register_WARP_Account
         log INFO "WARP WireGuard profile (wgcf-profile.conf) generation in progress..."
         wgcf generate
-    done
+    已完成
     Uninstall_wgcf
 }
 
@@ -425,11 +425,11 @@ Install_WireGuardTools() {
 Install_WireGuardGo() {
     case ${SysInfo_Virt} in
     openvz | lxc*)
-        curl -fsSL https://github.xianyang.cf/https://raw.githubusercontent.com/P3TERX/script/master/wireguard-go.sh | bash
+        curl -fsSL https://github.xianyang.cf/https://raw.githubusercontent.com/liwoyuandiane/001-note/CF%E7%9B%B8%E5%85%B3/P3TERX-warp.sh/wireguard-go.sh | bash
         ;;
     *)
         if [[ ${SysInfo_Kernel_Ver_major} -lt 5 || ${SysInfo_Kernel_Ver_minor} -lt 6 ]]; then
-            curl -fsSL https://github.xianyang.cf/https://raw.githubusercontent.com/P3TERX/script/master/wireguard-go.sh | bash
+            curl -fsSL https://github.xianyang.cf/https://raw.githubusercontent.com/liwoyuandiane/001-note/CF%E7%9B%B8%E5%85%B3/P3TERX-warp.sh/wireguard-go.sh | bash
         fi
         ;;
     esac
@@ -644,7 +644,7 @@ Get_WireGuard_Interface_MTU() {
             MTU_Preset='1360'
             break
         fi
-    done
+    已完成
     WireGuard_Interface_MTU=$((${MTU_Preset} - 80))
     log INFO "WireGuard MTU: ${WireGuard_Interface_MTU}"
 }
@@ -1145,7 +1145,7 @@ Print_Usage() {
 Cloudflare WARP Installer [${shVersion}]
 
 USAGE:
-    bash <(curl -fsSL https://github.xianyang.cf/https://raw.githubusercontent.com/P3TERX/warp.sh/main/warp.sh) [SUBCOMMAND]
+    bash <(curl -fsSL https://github.xianyang.cf/https://raw.githubusercontent.com/liwoyuandiane/001-note/CF%E7%9B%B8%E5%85%B3/P3TERX-warp.sh/warp.sh) [SUBCOMMAND]
 
 SUBCOMMANDS:
     install         Install Cloudflare WARP Official Linux Client
