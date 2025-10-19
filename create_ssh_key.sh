@@ -37,9 +37,33 @@ if [ -f "$KEY_FILE" ]; then
             1)
                 # 备份现有密钥
                 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-                print_info "正在备份现有密钥到 ${KEY_FILE}.backup_$TIMESTAMP"
-                cp "$KEY_FILE" "${KEY_FILE}.backup_$TIMESTAMP"
-                cp "${KEY_FILE}.pub" "${KEY_FILE}.pub.backup_$TIMESTAMP" 2>/dev/null || true
+                BACKUP_FILE="${KEY_FILE}.backup_$TIMESTAMP"
+                BACKUP_PUB_FILE="${KEY_FILE}.pub.backup_$TIMESTAMP"
+                
+                # 检查备份文件是否已存在
+                if [ -f "$BACKUP_FILE" ]; then
+                    print_warning "备份文件 $BACKUP_FILE 已存在"
+                    while true; do
+                        read -p "是否要替换备份文件？(y/n): " replace_backup
+                        case $replace_backup in
+                            y|Y)
+                                print_info "正在替换备份文件..."
+                                break
+                                ;;
+                            n|N)
+                                print_info "操作已取消。"
+                                exit 0
+                                ;;
+                            *)
+                                print_error "无效选择。请输入 y 或 n。"
+                                ;;
+                        esac
+                    done
+                fi
+                
+                print_info "正在备份现有密钥到 $BACKUP_FILE"
+                cp "$KEY_FILE" "$BACKUP_FILE"
+                cp "${KEY_FILE}.pub" "$BACKUP_PUB_FILE" 2>/dev/null || true
                 break
                 ;;
             2)
