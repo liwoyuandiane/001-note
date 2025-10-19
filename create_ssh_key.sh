@@ -1,16 +1,16 @@
 #!/bin/bash
 
-# 打印彩色输出的函数
+# 打印输出的函数
 print_info() {
-    echo -e "\033[32m[信息]\033[0m $1"
+    echo "[信息] $1"
 }
 
 print_warning() {
-    echo -e "\033[33m[警告]\033[0m $1"
+    echo "[警告] $1"
 }
 
 print_error() {
-    echo -e "\033[31m[错误]\033[0m $1"
+    echo "[错误] $1"
 }
 
 # 检查SSH目录是否存在，如果不存在则创建
