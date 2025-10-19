@@ -13,32 +13,6 @@ print_error() {
     echo "[错误] $1"
 }
 
-# 验证密钥对是否匹配的函数
-verify_key_pair() {
-    local key_file="$1"
-    local pub_file="${key_file}.pub"
-    
-    # 检查密钥文件是否存在
-    if [ ! -f "$key_file" ] || [ ! -f "$pub_file" ]; then
-        print_error "密钥文件不存在"
-        return 1
-    fi
-    
-    # 从私钥生成公钥并与其比较
-    local generated_pub
-    generated_pub=$(openssl rsa -in "$key_file" -pubout -outform PEM 2>/dev/null)
-    local existing_pub
-    existing_pub=$(cat "$pub_file")
-    
-    if [ "$generated_pub" = "$existing_pub" ]; then
-        print_info "密钥对验证成功：公钥和私钥匹配"
-        return 0
-    else
-        print_error "密钥对验证失败：公钥和私钥不匹配"
-        return 1
-    fi
-}
-
 # 检查SSH目录是否存在，如果不存在则创建
 SSH_DIR="$HOME/.ssh"
 if [ ! -d "$SSH_DIR" ]; then
@@ -55,11 +29,10 @@ if [ -f "$KEY_FILE" ]; then
     echo "1) 备份现有密钥并创建新密钥"
     echo "2) 覆盖现有密钥"
     echo "3) 取消操作"
-    echo "4) 验证现有密钥对是否匹配"
     
     # 循环直到用户做出有效选择
     while true; do
-        read -p "请输入您的选择 (1/2/3/4): " choice
+        read -p "请输入您的选择 (1/2/3): " choice
         case $choice in
             1)
                 # 备份现有密钥
@@ -104,16 +77,8 @@ if [ -f "$KEY_FILE" ]; then
                 print_info "操作已取消。"
                 exit 0
                 ;;
-            4)
-                print_info "正在验证现有密钥对..."
-                if verify_key_pair "$KEY_FILE"; then
-                    exit 0
-                else
-                    exit 1
-                fi
-                ;;
             *)
-                print_error "无效选择。请输入 1、2、3 或 4。"
+                print_error "无效选择。请输入 1、2 或 3。"
                 ;;
         esac
     done
@@ -133,7 +98,7 @@ print_info "正在生成新的SSH密钥..."
 openssl genrsa -out "$KEY_FILE" 4096 >/dev/null 2>&1
 
 # 检查私钥生成是否成功
-if [ $? -ne 0 ]; 键，然后
+if [ $? -ne 0 ]; then
     print_error "无法生成SSH私钥。"
     exit 1
 fi
@@ -154,15 +119,7 @@ chmod 644 "${KEY_FILE}.pub"
 print_info "SSH密钥生成成功！"
 print_info "私钥: $KEY_FILE"
 print_info "公钥: ${KEY_FILE}.pub"
-
-# 验证生成的密钥对是否匹配
-print_info "正在验证密钥对..."
-if verify_key_pair "$KEY_FILE"; then
-    print_info "密钥指纹:"
-    # 生成指纹
-    FINGERPRINT=$(openssl rsa -in "$KEY_FILE" -pubout -outform DER 2>/dev/null | openssl md5 -c)
-    echo "$FINGERPRINT"
-else
-    print_error "密钥对验证失败，请检查密钥文件"
-    exit 1
-fi
+print_info "密钥指纹:"
+# 生成指纹
+FINGERPRINT=$(openssl rsa -in "$KEY_FILE" -pubout -outform DER 2>/dev/null | openssl md5 -c)
+echo "$FINGERPRINT"
