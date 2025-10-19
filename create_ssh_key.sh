@@ -47,22 +47,25 @@ if [ -f "$KEY_FILE" ]; then
                         case $replace_backup in
                             y|Y)
                                 print_info "正在替换备份文件..."
+                                print_info "正在备份现有密钥到 $BACKUP_FILE"
+                                cp "$KEY_FILE" "$BACKUP_FILE"
+                                cp "${KEY_FILE}.pub" "$BACKUP_PUB_FILE" 2>/dev/null || true
                                 break
                                 ;;
                             n|N)
-                                print_info "操作已取消。"
-                                exit 0
+                                print_info "跳过备份，继续生成新密钥..."
+                                break
                                 ;;
                             *)
                                 print_error "无效选择。请输入 y 或 n。"
                                 ;;
                         esac
                     done
+                else
+                    print_info "正在备份现有密钥到 $BACKUP_FILE"
+                    cp "$KEY_FILE" "$BACKUP_FILE"
+                    cp "${KEY_FILE}.pub" "$BACKUP_PUB_FILE" 2>/dev/null || true
                 fi
-                
-                print_info "正在备份现有密钥到 $BACKUP_FILE"
-                cp "$KEY_FILE" "$BACKUP_FILE"
-                cp "${KEY_FILE}.pub" "$BACKUP_PUB_FILE" 2>/dev/null || true
                 break
                 ;;
             2)
