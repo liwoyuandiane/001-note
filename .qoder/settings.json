@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "ask": [
+      "Read(!/data/**)",
+      "Edit(!/data/**)"
+    ],
+    "allow": [
+      "Read(/data/**)",
+      "Edit(/data/**)"
+    ]
+  },
+  "memoryImport": {},
+  "monitoring": {}
+}
