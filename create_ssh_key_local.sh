@@ -1,135 +1,152 @@
 #!/bin/bash
 
-echo "========================================"
-echo "         SSH 密钥生成工具"
-echo "========================================"
-
-read -p "请输入您的邮箱地址（用于标识密钥）: " email
-
-echo
-echo "正在检查当前目录是否已存在 SSH 密钥..."
-
-# 定义密钥文件路径（当前目录）
-KEY_DIR="./ssh_keys"
-PRIVATE_KEY="$KEY_DIR/id_rsa"
-PUBLIC_KEY="$KEY_DIR/id_rsa.pub"
-
-# 创建密钥目录
-mkdir -p "$KEY_DIR"
-
-# 检测是否存在密钥文件
-key_exists=false
-if [ -f "$PRIVATE_KEY" ] || [ -f "$PUBLIC_KEY" ]; then
-    key_exists=true
+# SSH密钥创建脚本
+create_ssh_key() {
+    local ssh_dir="$HOME/.ssh"
+    local private_key="$ssh_dir/id_rsa"
+    local public_key="$private_key.pub"
     
-    echo "⚠️  检测到当前目录已存在 SSH 密钥！"
-    echo
-    echo "现有密钥信息:"
-    if [ -f "$PRIVATE_KEY" ]; then
-        echo "  • 私钥: $(realpath "$PRIVATE_KEY")"
-        echo "  • 大小: $(du -h "$PRIVATE_KEY" | cut - cut -f1)"
-        echo "  • 修改时间: $(date -r "$PRIVATE_KEY" "+%Y-%m-%d %H:%M:%S")"
-    fi
-    if [ -f "$PUBLIC_KEY" ]; then
-        echo "  • 公钥: $(realpath "$PUBLIC_KEY")"
-        echo "  • 指纹: $(ssh-keygen -lf "$PUBLIC_KEY" 2>/dev/null | head -n1 || echo "无法读取指纹")"
+    # 检查SSH目录是否存在，不存在则创建
+    if [[ ! -d "$ssh_dir" ]]; then
+        mkdir -p "$ssh_dir"
+        chmod 700 "$ssh_dir"
     fi
     
-    echo
-    echo "请选择操作:"
-    echo "1) 备份现有密钥并创建新密钥"
-    echo "2) 直接覆盖现有密钥"
-    echo "3) 退出脚本"
-    echo
+    # 检查密钥是否已存在
+    if [[ -f "$private_key" || -f "$public_key" ]]; then
+        echo "检测到已存在的SSH密钥: $private_key"
+        
+        while true; do
+            echo ""
+            echo "请选择操作:"
+            echo "1) 备份现有密钥并创建新密钥"
+            echo "2) 直接覆盖现有密钥"
+            echo "3) 取消操作"
+            read -p "请输入选择 [1-3]: " choice
+            
+            case $choice in
+                1)
+                    backup_and_create "$private_key" "$public_key"
+                    return 0
+                    ;;
+                2)
+                    overwrite_keys "$private_key" "$public_key"
+                    return 0
+                    ;;
+                3)
+                    echo "操作已取消"
+                    return 1
+                    ;;
+                *)
+                    echo "无效的选择，请重新输入"
+                    ;;
+            esac
+        done
+    else
+        create_new_keys "$private_key"
+        return 0
+    fi
+}
+
+# 备份并创建新密钥
+backup_and_create() {
+    local private_key=$1
+    local public_key=$2
+    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local backup_dir="$HOME/.ssh/backup_$timestamp"
     
-    while true; do
-        read -p "请输入选择 (1/2/3): " choice
-        case $choice in
-            1)
-                # 备份现有密钥
-                BACKUP_DIR="${KEY_DIR}/backup_$(date +%Y%m%d_%H%M%S)"
-                mkdir -p "$BACKUP_DIR"
-                
-                echo
-                echo "正在备份现有密钥..."
-                if [ -f "$PRIVATE_KEY" ]; then
-                    cp "$PRIVATE_KEY" "$BACKUP_DIR/"
-                    echo "✓ 私钥备份到: $BACKUP_DIR/id_rsa"
-                fi
-                if [ -f "$PUBLIC_KEY" ]; then
-                    cp "$PUBLIC_KEY" "$BACKUP_DIR/"
-                    echo "✓ 公钥备份到: $BACKUP_DIR/id_rsa.pub"
-                fi
-                break
-                ;;
-            2)
-                # 直接覆盖，无需备份
-                echo
-                echo "⚠️  警告：直接覆盖现有密钥！"
-                read -p "确认继续吗？(输入 'yes' 继续): " confirm
-                if [ "$confirm" != "yes" ]; then
-                    echo "操作已取消。"
-                    exit 0
-                fi
-                echo "正在删除现有密钥..."
-                rm -f "$PRIVATE_KEY" "$PUBLIC_KEY"
-                break
-                ;;
-            3)
-                echo "操作已取消。"
-                exit 0
-                ;;
-            *)
-                echo "无效选择，请重新输入 (1/2/3)"
-                ;;
-        esac
-    done
-fi
+    echo "正在备份现有密钥..."
+    mkdir -p "$backup_dir"
+    
+    if [[ -f "$private_key" ]]; then
+        mv "$private_key" "$backup_dir/"
+        echo "已备份私钥: $backup_dir/id_rsa"
+    fi
+    
+    if [[ -f "$public_key" ]]; then
+        mv "$public_key" "$backup_dir/"
+        echo "已备份公钥: $backup_dir/id_rsa.pub"
+    fi
+    
+    create_new_keys "$private_key"
+    echo "备份完成，旧密钥保存在: $backup_dir"
+}
 
-echo
-echo "正在生成新的 SSH 密钥对..."
-ssh-keygen -t rsa -b 4096 -C "$email" -f "$PRIVATE_KEY" -N ""
+# 直接覆盖密钥
+overwrite_keys() {
+    local private_key=$1
+    local public_key=$2
+    
+    echo "警告：这将永久删除现有的SSH密钥！"
+    read -p "确认要覆盖吗？(y/N): " confirm
+    
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        rm -f "$private_key" "$public_key"
+        create_new_keys "$private_key"
+        echo "已成功覆盖SSH密钥"
+    else
+        echo "操作已取消"
+        return 1
+    fi
+}
 
-if [ $? -ne 0 ]; then
-    echo "错误：SSH 密钥生成失败！"
-    exit 1
-fi
+# 创建新密钥
+create_new_keys() {
+    local private_key=$1
+    
+    echo ""
+    read -p "请输入邮箱地址 (可选): " email
+    read -p "请输入密钥保存路径 [默认为 $private_key]: " key_path
+    
+    key_path=${key_path:-$private_key}
+    
+    # 确保目录存在
+    local key_dir=$(dirname "$key_path")
+    mkdir -p "$key_dir"
+    
+    # 构建ssh-keygen命令
+    local keygen_cmd="ssh-keygen -t rsa -b 4096 -f \"$key_path\""
+    
+    if [[ -n "$email" ]]; then
+        keygen_cmd="$keygen_cmd -C \"$email\""
+    else
+        keygen_cmd="$keygen_cmd -C \"$(whoami)@$(hostname)\""
+    fi
+    
+    echo "正在生成SSH密钥..."
+    eval "$keygen_cmd"
+    
+    if [[ $? -eq 0 ]]; then
+        echo ""
+        echo "✅ SSH密钥创建成功！"
+        echo "🔑 私钥位置: $key_path"
+        echo "🔑 公钥位置: $key_path.pub"
+        echo ""
+        echo "公钥内容:"
+        cat "$key_path.pub"
+        echo ""
+        echo "请妥善保管您的私钥文件！"
+    else
+        echo "❌ SSH密钥创建失败"
+        return 1
+    fi
+}
 
-# 设置适当的权限
-chmod 700 "$KEY_DIR"
-chmod 600 "$PRIVATE_KEY"
-chmod 644 "$PUBLIC_KEY"
+# 主函数
+main() {
+    echo "=== SSH密钥生成工具 ==="
+    
+    # 检查ssh-keygen是否可用
+    if ! command -v ssh-keygen &> /dev/null; then
+        echo "错误: 未找到 ssh-keygen 命令，请先安装OpenSSH"
+        exit 1
+    fi
+    
+    create_ssh_key
+}
 
-echo
-echo "✓ SSH 密钥已成功生成！"
-echo
+# 设置错误处理
+set -euo pipefail
 
-echo "========================================"
-echo "          您的公钥内容"
-echo "========================================"
-cat "$PUBLIC_KEY"
-
-echo
-echo "========================================"
-echo "          重要信息"
-echo "========================================"
-echo "1. 私钥位置: $(realpath "$PRIVATE_KEY")"
-echo "2. 公钥位置: $(realpath "$PUBLIC_KEY")"
-echo "3. 密钥目录: $(realpath "$KEY_DIR")"
-
-if [ "$key_exists" = true ] && [ "$choice" = "1" ]; then
-    echo "4. 旧密钥备份位置: $(realpath "$BACKUP_DIR")"
-fi
-
-echo "5. 请将上述公钥内容添加到需要访问的服务器"
-echo "6. 使用示例: ssh -i $(realpath "$PRIVATE_KEY") user@hostname"
-echo
-
-# 显示使用说明
-echo "使用说明:"
-echo "1. 将上方公钥内容添加到目标服务器的 ~/.ssh/authorized_keys 文件中"
-echo "2. 连接时使用: ssh -i '$PRIVATE_KEY' username@hostname"
-echo "3. 对于 Play with Docker，请将公钥内容粘贴到平台的 SSH Keys 设置中"
-echo
-
-read -p "按回车键退出..."
+# 运行主函数
+main "$@"
