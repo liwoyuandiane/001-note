@@ -1,6 +1,6 @@
 ### 创建SSH密钥脚本
 ```shell
-wget -N https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/create_ssh_key_local.sh && chmod +x create_ssh_key_local.sh && bash create_ssh_key_local.sh
+curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/create_ssh_key_local.sh | bash
 ```
 
 
