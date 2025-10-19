@@ -1,6 +1,11 @@
 ### 创建SSH密钥脚本
 ```shell
-curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/create_ssh_key.sh | bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/create_ssh_key.sh)"
+```
+
+或者使用两步过程：
+```shell
+curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/create_ssh_key.sh -o create_ssh_key.sh && chmod +x create_ssh_key.sh && ./create_ssh_key.sh
 ```
 
 
