@@ -30,10 +30,11 @@ if [ -f "$KEY_FILE" ]; then
     echo "2) 覆盖现有密钥"
     echo "3) 取消操作"
     
-    # 使用select命令提供更好的用户交互体验
-    select choice in "备份现有密钥并创建新密钥" "覆盖现有密钥" "取消操作"; do
+    # 使用普通输入方式替代select命令，以解决在管道中运行时的问题
+    while true; do
+        read -p "请输入您的选择 (1/2/3): " choice
         case $choice in
-            "备份现有密钥并创建新密钥")
+            1)
                 # 备份现有密钥
                 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
                 print_info "正在备份现有密钥到 ${KEY_FILE}.backup_$TIMESTAMP"
@@ -41,11 +42,11 @@ if [ -f "$KEY_FILE" ]; then
                 cp "${KEY_FILE}.pub" "${KEY_FILE}.pub.backup_$TIMESTAMP" 2>/dev/null || true
                 break
                 ;;
-            "覆盖现有密钥")
+            2)
                 print_info "正在覆盖现有密钥..."
                 break
                 ;;
-            "取消操作")
+            3)
                 print_info "操作已取消。"
                 exit 0
                 ;;
