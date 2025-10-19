@@ -30,31 +30,38 @@ if [ -f "$KEY_FILE" ]; then
     echo "2) 覆盖现有密钥"
     echo "3) 取消操作"
     
-    # 使用普通输入方式替代select命令，以解决在管道中运行时的问题
-    while true; do
-        read -p "请输入您的选择 (1/2/3): " choice
-        case $choice in
-            1)
-                # 备份现有密钥
-                TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-                print_info "正在备份现有密钥到 ${KEY_FILE}.backup_$TIMESTAMP"
-                cp "$KEY_FILE" "${KEY_FILE}.backup_$TIMESTAMP"
-                cp "${KEY_FILE}.pub" "${KEY_FILE}.pub.backup_$TIMESTAMP" 2>/dev/null || true
-                break
-                ;;
-            2)
-                print_info "正在覆盖现有密钥..."
-                break
-                ;;
-            3)
-                print_info "操作已取消。"
-                exit 0
-                ;;
-            *)
-                print_error "无效选择。请输入 1、2 或 3。"
-                ;;
-        esac
-    done
+    # 当脚本通过管道运行时，需要特殊处理输入
+    if [ -t 0 ]; then
+        # 终端直接运行
+        while true; do
+            read -p "请输入您的选择 (1/2/3): " choice
+            case $choice in
+                1)
+                    # 备份现有密钥
+                    TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+                    print_info "正在备份现有密钥到 ${KEY_FILE}.backup_$TIMESTAMP"
+                    cp "$KEY_FILE" "${KEY_FILE}.backup_$TIMESTAMP"
+                    cp "${KEY_FILE}.pub" "${KEY_FILE}.pub.backup_$TIMESTAMP" 2>/dev/null || true
+                    break
+                    ;;
+                2)
+                    print_info "正在覆盖现有密钥..."
+                    break
+                    ;;
+                3)
+                    print_info "操作已取消。"
+                    exit 0
+                    ;;
+                *)
+                    print_error "无效选择。请输入 1、2 或 3。"
+                    ;;
+            esac
+        done
+    else
+        # 通过管道运行，使用默认选项2（覆盖现有密钥）
+        print_info "通过管道运行，默认选择覆盖现有密钥..."
+        print_info "正在覆盖现有密钥..."
+    fi
 else
     print_info "未找到现有的SSH密钥。正在创建新密钥..."
 fi
