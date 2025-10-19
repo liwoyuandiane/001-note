@@ -42,6 +42,7 @@ if [ -f "$KEY_FILE" ]; then
                 # 检查备份文件是否已存在
                 if [ -f "$BACKUP_FILE" ]; then
                     print_warning "备份文件 $BACKUP_FILE 已存在"
+                    print_warning "注意：如果您选择不替换备份文件，现有密钥将被直接覆盖！"
                     while true; do
                         read -p "是否要替换备份文件？(y/n): " replace_backup
                         case $replace_backup in
@@ -53,7 +54,7 @@ if [ -f "$KEY_FILE" ]; then
                                 break
                                 ;;
                             n|N)
-                                print_info "跳过备份，继续生成新密钥..."
+                                print_warning "现有密钥将被直接覆盖！"
                                 break
                                 ;;
                             *)
