@@ -17,18 +17,73 @@ PUBLIC_KEY="$KEY_DIR/id_rsa.pub"
 # 创建密钥目录
 mkdir -p "$KEY_DIR"
 
-if [ -f "$PRIVATE_KEY" ]; then
-    echo "检测到当前目录已存在 SSH 密钥！"
-    read -p "是否覆盖现有密钥？(y/N): " overwrite
-    if [[ ! $overwrite =~ ^[Yy]$ ]]; then
-        echo "操作已取消。"
-        exit 0
+# 检测是否存在密钥文件
+key_exists=false
+if [ -f "$PRIVATE_KEY" ] || [ -f "$PUBLIC_KEY" ]; then
+    key_exists=true
+    
+    echo "⚠️  检测到当前目录已存在 SSH 密钥！"
+    echo
+    echo "现有密钥信息:"
+    if [ -f "$PRIVATE_KEY" ]; then
+        echo "  • 私钥: $(realpath "$PRIVATE_KEY")"
+        echo "  • 大小: $(du -h "$PRIVATE_KEY" | cut -f1)"
+        echo "  • 修改时间: $(date -r "$PRIVATE_KEY" "+%Y-%m-%d %H:%M:%S")"
     fi
-    # 备份旧密钥
-    BACKUP_DIR="${KEY_DIR}/backup_$(date +%Y%m%d_%H%M%S)"
-    mkdir -p "$BACKUP_DIR"
-    mv "$PRIVATE_KEY" "$PUBLIC_KEY" "$BACKUP_DIR/" 2>/dev/null
-    echo "旧密钥已备份到: $BACKUP_DIR"
+    if [ -f "$PUBLIC_KEY" ]; then
+        echo "  • 公钥: $(realpath "$PUBLIC_KEY")"
+        echo "  • 指纹: $(ssh $(ssh-keygen -lf "$PUBLIC_KEY" 2>/dev/null | cut -d' ' -f2- || echo "无法读取指纹")"
+    fi
+    
+    echo
+    echo "请选择操作:"
+    echo "1) 备份现有密钥并创建新密钥"
+    echo "2) 直接覆盖现有密钥"
+    echo "3) 退出脚本"
+    echo
+    
+    while true; do
+        read -p "请输入选择 (1/2/3): " choice
+        case $choice in
+            1)
+                # 备份现有密钥
+                BACKUP_DIR="${KEY_DIR}/backup_$(date +%Y%m%d_%H%M%S)"
+                mkdir -p "$BACKUP_DIR"
+                
+                echo
+                echo "正在备份现有密钥..."
+                if [ -f "$PRIVATE_KEY" ]; then
+                    mv "$PRIVATE_KEY" "$BACKUP_DIR/"
+                    echo "✓ 私钥备份到: $BACKUP_DIR/id_rsa"
+                fi
+                if [ -f "$PUBLIC_KEY" ]; then
+                    mv "$PUBLIC_KEY" "$BACKUP_DIR/"
+                    echo "✓ 公钥备份到: $BACKUP_DIR/id_rsa.pub"
+                fi
+                break
+                ;;
+            2)
+                # 直接覆盖，无需备份
+                echo
+                echo "⚠️  警告：直接覆盖现有密钥！"
+                read -p "确认继续吗？(输入 'yes' 继续): " confirm
+                if [ "$confirm" != "yes" ]; then
+                    echo "操作已取消。"
+                    exit 0
+                fi
+                echo "正在删除现有密钥..."
+                rm -f "$PRIVATE_KEY" "$PUBLIC_KEY"
+                break
+                ;;
+            3)
+                echo "操作已取消。"
+                exit 0
+                ;;
+            *)
+                echo "无效选择，请重新输入 (1/2/3)"
+                ;;
+        esac
+    done
 fi
 
 echo
@@ -61,22 +116,27 @@ echo "========================================"
 echo "1. 私钥位置: $(realpath "$PRIVATE_KEY")"
 echo "2. 公钥位置: $(realpath "$PUBLIC_KEY")"
 echo "3. 密钥目录: $(realpath "$KEY_DIR")"
-echo "4. 请将公钥内容添加到需要访问的服务器"
-echo "5. 使用示例: ssh -i $(realpath "$PRIVATE_KEY") user@hostname"
+
+if [ "$key_exists" = true ]; then
+    if [ "$choice" = "1" ]; then
+        echo "4. 旧密钥备份位置: $(realpath "$BACKUP_DIR")"
+    fi
+fi
+
+echo "5. 请将公钥内容添加到需要访问的服务器"
+echo "6. 使用示例: ssh -i $(realpath "$PRIVATE_KEY") user@hostname"
 echo
 
 # 尝试复制到剪贴板
 if command -v pbcopy >/dev/null 2>&1; then
- then
     # macOS
     cat "$PUBLIC_KEY" | pbcopy
     echo "✓ 公钥已复制到剪贴板 (macOS)"
-elif command -v xclip >/dev/null 2>&1; then
+elif command -v xclip >/dev/null 2>&1; 键，然后
     # Linux with xclip
     cat "$PUBLIC_KEY" | xclip -selection clipboard
     echo "✓ 公钥已复制到剪贴板 (Linux)"
 elif command -v xsel >/dev/null 2>&1; then
- then
     # Linux with xsel
     cat "$PUBLIC_KEY" | xsel --clipboard --input
     echo "✓ 公钥已复制到剪贴板 (Linux)"
