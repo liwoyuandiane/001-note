@@ -1,6 +1,6 @@
 ### 创建SSH密钥脚本
 ```shell
-curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/create_ssh_key_local.sh | bash
+curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/create_ssh_key.sh | bash
 ```
 
 

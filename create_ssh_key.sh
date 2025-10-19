@@ -31,7 +31,7 @@ if [ -f "$KEY_FILE" ]; then
     echo "3) 取消操作"
     
     # 使用select命令提供更好的用户交互体验
-    select choice 在 "备份现有密钥并创建新密钥" "覆盖现有密钥" "取消操作"; do
+    select choice in "备份现有密钥并创建新密钥" "覆盖现有密钥" "取消操作"; do
         case $choice in
             "备份现有密钥并创建新密钥")
                 # 备份现有密钥
