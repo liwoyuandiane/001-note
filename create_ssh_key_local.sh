@@ -27,12 +27,12 @@ if [ -f "$PRIVATE_KEY" ] || [ -f "$PUBLIC_KEY" ]; then
     echo "现有密钥信息:"
     if [ -f "$PRIVATE_KEY" ]; then
         echo "  • 私钥: $(realpath "$PRIVATE_KEY")"
-        echo "  • 大小: $(du -h "$PRIVATE_KEY" | cut -f1)"
+        echo "  • 大小: $(du -h "$PRIVATE_KEY" | cut - cut -f1)"
         echo "  • 修改时间: $(date -r "$PRIVATE_KEY" "+%Y-%m-%d %H:%M:%S")"
     fi
     if [ -f "$PUBLIC_KEY" ]; then
         echo "  • 公钥: $(realpath "$PUBLIC_KEY")"
-        echo "  • 指纹: $(ssh $(ssh-keygen -lf "$PUBLIC_KEY" 2>/dev/null | cut -d' ' -f2- || echo "无法读取指纹")"
+        echo "  • 指纹: $(ssh-keygen -lf "$PUBLIC_KEY" 2>/dev/null | head -n1 || echo "无法读取指纹")"
     fi
     
     echo
@@ -53,11 +53,11 @@ if [ -f "$PRIVATE_KEY" ] || [ -f "$PUBLIC_KEY" ]; then
                 echo
                 echo "正在备份现有密钥..."
                 if [ -f "$PRIVATE_KEY" ]; then
-                    mv "$PRIVATE_KEY" "$BACKUP_DIR/"
+                    cp "$PRIVATE_KEY" "$BACKUP_DIR/"
                     echo "✓ 私钥备份到: $BACKUP_DIR/id_rsa"
                 fi
                 if [ -f "$PUBLIC_KEY" ]; then
-                    mv "$PUBLIC_KEY" "$BACKUP_DIR/"
+                    cp "$PUBLIC_KEY" "$BACKUP_DIR/"
                     echo "✓ 公钥备份到: $BACKUP_DIR/id_rsa.pub"
                 fi
                 break
@@ -117,39 +117,19 @@ echo "1. 私钥位置: $(realpath "$PRIVATE_KEY")"
 echo "2. 公钥位置: $(realpath "$PUBLIC_KEY")"
 echo "3. 密钥目录: $(realpath "$KEY_DIR")"
 
-if [ "$key_exists" = true ]; then
-    if [ "$choice" = "1" ]; then
-        echo "4. 旧密钥备份位置: $(realpath "$BACKUP_DIR")"
-    fi
+if [ "$key_exists" = true ] && [ "$choice" = "1" ]; then
+    echo "4. 旧密钥备份位置: $(realpath "$BACKUP_DIR")"
 fi
 
-echo "5. 请将公钥内容添加到需要访问的服务器"
+echo "5. 请将上述公钥内容添加到需要访问的服务器"
 echo "6. 使用示例: ssh -i $(realpath "$PRIVATE_KEY") user@hostname"
 echo
 
-# 尝试复制到剪贴板
-if command -v pbcopy >/dev/null 2>&1; then
-    # macOS
-    cat "$PUBLIC_KEY" | pbcopy
-    echo "✓ 公钥已复制到剪贴板 (macOS)"
-elif command -v xclip >/dev/null 2>&1; 键，然后
-    # Linux with xclip
-    cat "$PUBLIC_KEY" | xclip -selection clipboard
-    echo "✓ 公钥已复制到剪贴板 (Linux)"
-elif command -v xsel >/dev/null 2>&1; then
-    # Linux with xsel
-    cat "$PUBLIC_KEY" | xsel --clipboard --input
-    echo "✓ 公钥已复制到剪贴板 (Linux)"
-else
-    echo "提示：安装 xclip 或 xsel 可自动复制公钥到剪贴板"
-fi
-
 # 显示使用说明
-echo
 echo "使用说明:"
 echo "1. 将上方公钥内容添加到目标服务器的 ~/.ssh/authorized_keys 文件中"
 echo "2. 连接时使用: ssh -i '$PRIVATE_KEY' username@hostname"
 echo "3. 对于 Play with Docker，请将公钥内容粘贴到平台的 SSH Keys 设置中"
 echo
 
-read -p "按回车键继续..."
+read -p "按回车键退出..."
