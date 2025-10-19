@@ -36,9 +36,8 @@ if [ -f "$KEY_FILE" ]; then
         case $choice in
             1)
                 # 备份现有密钥
-                TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-                BACKUP_FILE="${KEY_FILE}.backup_$TIMESTAMP"
-                BACKUP_PUB_FILE="${KEY_FILE}.pub.backup_$TIMESTAMP"
+                BACKUP_FILE="${KEY_FILE}.bak"
+                BACKUP_PUB_FILE="${KEY_FILE}.pub.bak"
                 
                 # 检查备份文件是否已存在
                 if [ -f "$BACKUP_FILE" ]; then
