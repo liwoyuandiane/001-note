@@ -69,7 +69,7 @@ get_mem_info(){
 # 检测文件系统类型
 get_fs_type(){
     FS_TYPE=$(df -T / | awk '/\/$/ {print $2}')
-    echo -e "${YELLOW}检测到根目录文件系统：${FS_TYPE}${FONT}"  # 修复NC未定义的问题
+    echo -e "${YELLOW}检测到根目录文件系统：${FS_TYPE}${FONT}"
     log_info "根目录文件系统类型：${FS_TYPE}"
 }
 
@@ -293,30 +293,33 @@ show_swap_status(){
     sleep 3
 }
 
-# ===================== 主菜单函数 =====================
+# ===================== 主菜单函数（核心修改处） =====================
 main_menu(){
     check_root
     check_commands
     check_ovz
     clear
+    # 显示当前系统状态
     get_mem_info
     echo -e "———————————————————————————————————————"
     echo -e "${GREEN}Linux VPS 一键Swap管理脚本${FONT}"
     echo -e "${GREEN}当前内存：${MEM_TOTAL_GB}GB | 当前Swap：${SWAP_TOTAL_GB}GB${FONT}"
     echo -e "———————————————————————————————————————"
-    echo -e "${GREEN}1、添加Swap${FONT}"
-    echo -e "${GREEN}2、删除Swap${FONT}"
-    echo -e "${GREEN}3、查看Swap详细状态${FONT}"
-    echo -e "${GREEN}4、退出${FONT}"
+    echo -e "${GREEN}1、添加Swap${FONT}"          # 保留
+    echo -e "${GREEN}2、删除Swap${FONT}"          # 保留
+    echo -e "${GREEN}3、查看Swap详细状态${FONT}"    # 保留
+    echo -e "${GREEN}0、退出${FONT}"              # 【修改1】4→0
     echo -e "———————————————————————————————————————"
-    read -t 60 -p "请输入数字 [1-4]（60秒超时返回菜单）:" CHOICE
+    # 【修改2】提示文字 [1-4]→[0-3]
+    read -t 60 -p "请输入数字 [0-3]（60秒超时返回菜单）:" CHOICE
     if [ -z "$CHOICE" ]; then
         echo -e "\n${YELLOW}超时未输入，返回主菜单...${FONT}"
         log_info "用户超时未输入，返回主菜单"
         sleep 1
-        main_menu
+        main_menu  # 重新调用菜单，不退出
         return 0
     fi
+    # 菜单逻辑
     case "$CHOICE" in
         1)
         add_swap
@@ -327,19 +330,21 @@ main_menu(){
         3)
         show_swap_status
         ;;
-        4)
+        0)  # 【修改3】4→0
         echo -e "${GREEN}脚本已退出${FONT}"
         log_info "用户主动选择退出脚本"
-        exit 0
+        exit 0  # 仅手动选0才退出
         ;;
         *)
         clear
-        echo -e "${RED}错误：请输入有效的数字 [1-4]${FONT}"
+        # 【修改4】错误提示 [1-4]→[0-3]
+        echo -e "${RED}错误：请输入有效的数字 [0-3]${FONT}"
         log_error "用户输入无效数字：${CHOICE}"
         sleep 2
-        main_menu
+        main_menu  # 输入错误返回菜单，不退出
         ;;
     esac
+    # 操作完成后返回菜单（修复多余换行，回车默认返回）
     echo ""
     read -t 15 -p "是否返回主菜单？(Y/n，15秒后默认返回):" BACK_MENU
     BACK_MENU=${BACK_MENU:-Y}
