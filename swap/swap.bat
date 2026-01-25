@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Linux VPS 一键Swap管理脚本（适配btrfs+防dd被kill）
+# Linux VPS 一键Swap管理脚本（btrfs最终适配版）
 GREEN="\033[32m"
 YELLOW="\033[33m"
 RED="\033[31m" 
@@ -69,7 +69,7 @@ get_mem_info(){
 # 检测文件系统类型
 get_fs_type(){
     FS_TYPE=$(df -T / | awk '/\/$/ {print $2}')
-    echo -e "${YELLOW}检测到根目录文件系统：${FS_TYPE}${NC}"
+    echo -e "${YELLOW}检测到根目录文件系统：${FS_TYPE}${FONT}"  # 修复NC未定义的问题
     log_info "根目录文件系统类型：${FS_TYPE}"
 }
 
@@ -118,7 +118,7 @@ add_swap(){
     # 计算分块大小（每块100M，避免dd被kill）
     BLOCK_SIZE=100
     BLOCK_COUNT=$((SWAP_SIZE_MB / BLOCK_SIZE))
-    # 处理余数
+    # 处理余数（即使余1M也多创建1块，兼容btrfs）
     if [ $((SWAP_SIZE_MB % BLOCK_SIZE)) -ne 0 ]; then
         BLOCK_COUNT=$((BLOCK_COUNT + 1))
     fi
@@ -158,7 +158,7 @@ add_swap(){
     echo -e "${YELLOW}分块创建${SWAP_SIZE}GB swap文件（每块${BLOCK_SIZE}M，共${BLOCK_COUNT}块）...${FONT}"
     dd if=/dev/zero of=/swapfile bs=${BLOCK_SIZE}M count=${BLOCK_COUNT} status=progress
 
-    # 校验文件大小
+    # 校验文件大小（核心修复：放宽误差，兼容btrfs）
     if [ ! -f "/swapfile" ]; then
         echo -e "${RED}错误：创建swap文件失败！文件未生成${FONT}"
         log_error "创建swap文件失败：/swapfile文件不存在"
@@ -166,13 +166,23 @@ add_swap(){
         return 0
     fi
     ACTUAL_SIZE_MB=$(( $(stat -c %s /swapfile) / 1024 / 1024 ))
-    # 允许±100M误差（btrfs块对齐）
-    if [ $((ACTUAL_SIZE_MB < SWAP_SIZE_MB - 100)) -o $((ACTUAL_SIZE_MB > SWAP_SIZE_MB + 100)) ]; then
-        echo -e "${RED}错误：swap文件大小不匹配！目标：${SWAP_SIZE_MB}MB，实际：${ACTUAL_SIZE_MB}MB${FONT}"
+    # 关键修改：
+    # 1. 误差范围从±100M改为±200M（适配btrfs块对齐）
+    # 2. 用||替代-o（bash更兼容）
+    # 3. 仅当误差超过200M时才报错
+    MIN_ALLOWED=$((SWAP_SIZE_MB - 200))
+    MAX_ALLOWED=$((SWAP_SIZE_MB + 200))
+    if [ "$ACTUAL_SIZE_MB" -lt "$MIN_ALLOWED" ] || [ "$ACTUAL_SIZE_MB" -gt "$MAX_ALLOWED" ]; then
+        echo -e "${RED}错误：swap文件大小偏差过大！目标：${SWAP_SIZE_MB}MB，实际：${ACTUAL_SIZE_MB}MB（允许±200M）${FONT}"
         log_error "swap文件大小不匹配：目标${SWAP_SIZE_MB}MB，实际${ACTUAL_SIZE_MB}MB"
         rm -f /swapfile
         sleep 2
         return 0
+    fi
+    # 小误差提示（不报错）
+    if [ "$ACTUAL_SIZE_MB" -ne "$SWAP_SIZE_MB" ]; then
+        echo -e "${YELLOW}提示：swap文件大小略有偏差（btrfs块对齐），目标${SWAP_SIZE_MB}MB，实际${ACTUAL_SIZE_MB}MB（不影响使用）${FONT}"
+        log_info "swap文件大小略有偏差：目标${SWAP_SIZE_MB}MB，实际${ACTUAL_SIZE_MB}MB"
     fi
     echo -e "${GREEN}创建swap文件成功（大小：${SWAP_SIZE}GB）${FONT}"
 
@@ -197,9 +207,8 @@ add_swap(){
     # 启用
     echo -e "${GREEN}正在启用swap文件...${FONT}"
     if ! swapon /swapfile; then
-        echo -e "${RED}错误：启用swap文件失败！btrfs需确认chattr +C已执行，其他系统检查挂载属性${FONT}"
+        echo -e "${RED}错误：启用swap文件失败！btrfs需确认chattr +C已执行${FONT}"
         log_error "swapon /swapfile执行失败"
-        # btrfs专属提示
         if [ "$FS_TYPE" = "btrfs" ]; then
             echo -e "${YELLOW}btrfs提示：请手动执行 chattr +C /swapfile 后重试${FONT}"
         fi
