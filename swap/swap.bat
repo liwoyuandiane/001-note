@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Linux VPS 一键Swap管理脚本（彻底解决fstab重复条目问题）
+# Linux VPS 一键Swap管理脚本
 GREEN="\033[32m"
 YELLOW="\033[33m"
 RED="\033[31m" 
@@ -66,7 +66,7 @@ get_mem_info(){
     SWAP_TOTAL_GB=$(echo "scale=0; ($SWAP_TOTAL_BYTES + 536870912) / 1073741824" | bc)
 }
 
-# 新增：彻底清理fstab中所有/swapfile条目
+# 彻底清理fstab中所有/swapfile条目
 clean_fstab_swap(){
     # 备份fstab
     local BACKUP_FILENAME="fstab.清理swap备份.$(date +%Y%m%d%H%M%S)"
