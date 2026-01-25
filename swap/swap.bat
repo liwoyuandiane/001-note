@@ -68,10 +68,8 @@ get_mem_info(){
 
 # 彻底清理fstab中所有/swapfile条目
 clean_fstab_swap(){
-    # 备份fstab
     local BACKUP_FILENAME="fstab.清理swap备份.$(date +%Y%m%d%H%M%S)"
     cp /etc/fstab /etc/$BACKUP_FILENAME
-    # 彻底删除所有包含/swapfile的行（不管格式）
     sed -i '/\/swapfile/d' /etc/fstab
     echo -e "${GREEN}已清理fstab中所有/swapfile相关条目（备份：/etc/$BACKUP_FILENAME）${FONT}"
     log_info "清理fstab中所有/swapfile条目，备份文件：/etc/$BACKUP_FILENAME"
@@ -85,7 +83,7 @@ add_swap(){
     echo -e "${GREEN}当前SWAP大小：${SWAP_TOTAL_GB}GB${FONT}"
     echo -e "${YELLOW}推荐SWAP大小：${RECOMMENDED_SWAP}GB（内存2倍，最大8GB）${FONT}"
     
-    # 交互输入
+    # 交互输入（回车默认使用推荐值，不退出）
     read -t 30 -p "请输入要添加的SWAP数值（单位：GB，直接回车/超时使用推荐值）:" SWAP_SIZE
     SWAP_SIZE=${SWAP_SIZE:-$RECOMMENDED_SWAP}
 
@@ -93,7 +91,8 @@ add_swap(){
     if ! [[ "$SWAP_SIZE" =~ ^[1-9][0-9]*$ ]]; then
         echo -e "${RED}错误：请输入有效的正整数！${FONT}"
         log_error "创建Swap失败：输入非有效正整数，输入值：${SWAP_SIZE}"
-        return 0
+        sleep 2  # 让用户看到错误提示
+        return 0 # 返回菜单，不退出
     fi
 
     # 超过8GB确认
@@ -114,17 +113,19 @@ add_swap(){
     if [ $AVAIL_SPACE_MB -lt $SWAP_SIZE_MB ]; then
         echo -e "${RED}错误：根目录可用空间不足！可用：${AVAIL_SPACE_MB}MB，需要：${SWAP_SIZE_MB}MB${FONT}"
         log_error "创建Swap失败：根目录可用空间不足，可用${AVAIL_SPACE_MB}MB，需要${SWAP_SIZE_MB}MB"
-        return 0
+        sleep 2  # 让用户看到错误提示
+        return 0 # 返回菜单，不退出
     fi
 
-    # 核心修复1：优先检查物理文件
+    # 优先检查物理文件
     if [ -f "/swapfile" ]; then
         echo -e "${RED}错误：/swapfile文件已存在！请先删除后再创建。${FONT}"
         log_error "创建Swap失败：物理文件/swapfile已存在"
-        return 0
+        sleep 2  # 让用户看到错误提示
+        return 0 # 返回菜单，不退出
     fi
 
-    # 核心修复2：创建前彻底清理fstab中所有/swapfile条目（避免重复）
+    # 创建前彻底清理fstab
     clean_fstab_swap
 
     # 创建swap文件
@@ -152,7 +153,7 @@ add_swap(){
     mkswap /swapfile
     swapon /swapfile
 
-    # 写入fstab（此时已清理过，不会重复）
+    # 写入fstab
     echo '/swapfile none swap defaults 0 0' >> /etc/fstab
     log_info "写入swapfile条目到fstab：/swapfile none swap defaults 0 0"
     
@@ -164,6 +165,7 @@ add_swap(){
         cp /etc/fstab.清理swap备份.$(date +%Y%m%d%H%M%S) /etc/fstab 2>/dev/null
         swapoff /swapfile
         rm -f /swapfile
+        sleep 2
         return 0
     else
         echo -e "${GREEN}fstab配置验证通过${FONT}"
@@ -173,6 +175,7 @@ add_swap(){
     echo -e "\n${GREEN}Swap创建成功！当前状态：${FONT}"
     free -h | grep -E "Mem|Swap|内存|交换"
     log_info "Swap创建成功，大小：${SWAP_SIZE}GB，文件路径：/swapfile"
+    sleep 2  # 让用户看到成功提示
 }
 
 # 删除Swap（彻底清理fstab）
@@ -188,11 +191,12 @@ del_swap(){
         else
             echo -e "${RED}错误：无法删除/swapfile文件！请手动执行 rm -rf /swapfile${FONT}"
             log_error "删除/swapfile文件失败"
+            sleep 2
             return 0
         fi
     fi
 
-    # 核心修复3：删除时彻底清理fstab中所有/swapfile条目
+    # 彻底清理fstab
     if grep -q "/swapfile" /etc/fstab; then
         echo -e "${GREEN}发现fstab中swapfile条目，彻底清理...${FONT}"
         clean_fstab_swap
@@ -204,10 +208,12 @@ del_swap(){
         echo -e "\n${GREEN}Swap删除成功！当前状态：${FONT}"
         free -h | grep -E "Mem|Swap|内存|交换"
         log_info "Swap删除成功：文件和fstab条目均已彻底清理"
+        sleep 2
     else
         if [ ! -f "/swapfile" ]; then
             echo -e "${RED}错误：未发现swapfile文件和fstab条目！无需删除。${FONT}"
             log_error "删除Swap失败：无物理文件且fstab无相关条目"
+            sleep 2
         fi
     fi
 }
@@ -222,9 +228,10 @@ show_swap_status(){
     grep -E "swap|交换" /etc/fstab || echo "fstab中无Swap相关配置"
     echo ""
     log_info "用户查看Swap详细状态"
+    sleep 2  # 让用户看完状态再返回
 }
 
-# 主菜单
+# 主菜单（核心修改：回车/超时不退出）
 main_menu(){
     check_root
     check_commands
@@ -240,12 +247,16 @@ main_menu(){
     echo -e "${GREEN}3、查看Swap详细状态${FONT}"
     echo -e "${GREEN}4、退出${FONT}"
     echo -e "———————————————————————————————————————"
-    read -t 60 -p "请输入数字 [1-4]（60秒超时自动退出）:" CHOICE
+    # 核心修改1：超时/回车为空 → 重新显示菜单，不退出
+    read -t 60 -p "请输入数字 [1-4]（60秒超时返回菜单）:" CHOICE
     if [ -z "$CHOICE" ]; then
-        echo -e "\n${YELLOW}超时未输入，脚本退出${FONT}"
-        log_info "脚本退出：用户超时未输入选择"
-        exit 0
+        echo -e "\n${YELLOW}超时未输入，返回主菜单...${FONT}"
+        log_info "用户超时未输入，返回主菜单"
+        sleep 1
+        main_menu  # 重新调用菜单，不退出
+        return 0
     fi
+    # 菜单逻辑
     case "$CHOICE" in
         1)
         add_swap
@@ -258,16 +269,18 @@ main_menu(){
         ;;
         4)
         echo -e "${GREEN}脚本已退出${FONT}"
-        log_info "用户主动退出脚本"
-        exit 0
+        log_info "用户主动选择退出脚本"
+        exit 0  # 仅手动选4才退出
         ;;
         *)
         clear
         echo -e "${RED}错误：请输入有效的数字 [1-4]${FONT}"
+        log_error "用户输入无效数字：${CHOICE}"
         sleep 2
-        main_menu
+        main_menu  # 输入错误返回菜单，不退出
         ;;
     esac
+    # 返回菜单提示（回车默认返回）
     echo ""
     read -t 15 -p "是否返回主菜单？(Y/n，15秒后默认返回):" BACK_MENU
     BACK_MENU=${BACK_MENU:-Y}
