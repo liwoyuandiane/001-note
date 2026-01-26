@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Linux VPS 一键Swap管理脚本（最终精简优化版） v1.0
+# Linux VPS 一键Swap管理脚本（最终精简优化版）v1.1
 # 功能特性：btrfs适配 | 自定义路径 | 路径自动补全 | 空间检测 | 开机自启 | 权限校验
 # 适用系统：Debian/Ubuntu/CentOS/RHEL/Armbian等主流Linux发行版
 
@@ -163,14 +163,20 @@ auto_complete_swap_path(){
 get_mem_info(){
     local mem_total_bytes swap_total_bytes
 
-    # 使用更兼容的方式获取内存信息
+    # 使用更兼容的方式获取内存信息，优先匹配英文
     if free -b >/dev/null 2>&1; then
-        mem_total_bytes=$(free -b | awk '/^Mem:/ || /^内存：/ {print $2}')
-        swap_total_bytes=$(free -b | awk '/^Swap:/ || /^交换：/ {print $2}')
+        mem_total_bytes=$(free -b | awk '/^Mem:/ {print $2}')
+        swap_total_bytes=$(free -b | awk '/^Swap:/ {print $2}')
     else
-        mem_total_bytes=$(free | awk '/^Mem:/ || /^内存：/ {print $2*1024}')
-        swap_total_bytes=$(free | awk '/^Swap:/ || /^交换：/ {print $2*1024}')
+        mem_total_bytes=$(free | awk '/^Mem:/ {print $2*1024}')
+        swap_total_bytes=$(free | awk '/^Swap:/ {print $2*1024}')
     fi
+
+    # 防止空值导致的计算错误
+    [[ -z "$mem_total_bytes" || "$mem_total_bytes" -eq 0 ]] && {
+        mem_total_bytes=4294967296  # 默认4GB
+        echo -e "${YELLOW}警告：无法检测内存大小，使用默认值4GB${FONT}"
+    }
 
     MEM_TOTAL_GB=$(echo "scale=0; ($mem_total_bytes + 536870912) / 1073741824" | bc)
     RECOMMENDED_SWAP=$((MEM_TOTAL_GB * 2))
@@ -181,7 +187,8 @@ get_mem_info(){
 }
 get_fs_type(){
     local target_path="$1"
-    FS_TYPE=$(df -T "$target_path" 2>/dev/null | awk 'NR>1 && $1 !~ /tmpfs/ {print $2; exit}')
+    # 使用更兼容的awk语法，避免出现"Unmatched ["错误
+    FS_TYPE=$(df -T "$target_path" 2>/dev/null | awk 'NR>1 {if ($1 !~ /tmpfs/) {print $2; exit}}')
     [[ -z "$FS_TYPE" ]] && FS_TYPE="unknown"
     echo -e "${YELLOW}检测到文件系统：${FS_TYPE}${FONT}"
     log_info "目标路径文件系统：${FS_TYPE}"
@@ -225,9 +232,9 @@ add_swap_advanced(){
 add_swap_core(){
     local swap_path="$1"
     local swap_size swap_size_mb block_size block_count
-    local target_dir avail_space_mb safe_space_mb
+    local target_dir avail_space safe_space_mb
     local actual_size_mb min_allowed max_allowed
-    local confirm_big backup_file
+    local confirm_big backup_file df_output
 
     # 检查Swap是否已激活
     check_swap_active "$swap_path" || {
@@ -265,7 +272,24 @@ add_swap_core(){
     [ $((swap_size_mb % block_size)) -ne 0 ] && block_count=$((block_count + 1))
 
     target_dir=$(dirname "$swap_path")
-    avail_space_mb=$(df -BM "$target_dir" | awk 'NR>1 {print $4; gsub("M",""); print}')
+    # 使用更兼容的方式获取可用空间，避免在ARM/LVM系统上出现问题
+    df_output=$(df -BM "$target_dir" 2>/dev/null | tail -n +2 | head -n 1)
+    if [[ -n "$df_output" ]]; then
+        avail_space_mb=$(echo "$df_output" | awk '{print $4}' | sed 's/M//')
+    else
+        # 回退方案：不使用 -M 参数
+        df_output=$(df "$target_dir" 2>/dev/null | tail -n +2 | head -n 1)
+        if [[ -n "$df_output" ]]; then
+            avail_space=$(echo "$df_output" | awk '{print $4}')
+            avail_space_mb=$((avail_space / 1024))
+        else
+            echo -e "${RED}错误：无法检测${target_dir}的可用空间！${FONT}"
+            log_error "无法检测磁盘空间"
+            sleep "$SLEEP_TIME"
+            return 0
+        fi
+    fi
+
     safe_space_mb=$((avail_space_mb - 200))
     [ "$safe_space_mb" -lt "$swap_size_mb" ] && {
         echo -e "${RED}错误：${target_dir}空间不足！可用${avail_space_mb}MB，需要${swap_size_mb}MB${FONT}"
@@ -293,7 +317,7 @@ add_swap_core(){
     fi
 
     echo -e "${YELLOW}分块创建${swap_size}GB（每块${block_size}M，共${block_count}块）...${FONT}"
-    if ! dd if=/dev/zero of="$swap_path" bs=${block_size}M count=${block_count} status=progress; then
+    if ! dd if=/dev/zero of="$swap_path" bs=${block_size}M count=${block_count} status=progress 2>&1; then
         echo -e "${RED}错误：dd命令执行失败！${FONT}"
         log_error "dd命令失败：${swap_path}"
         rm -f "$swap_path"
@@ -310,9 +334,9 @@ add_swap_core(){
 
     # 使用更兼容的文件大小获取方式
     if command -v stat >/dev/null 2>&1; then
-        actual_size_mb=$(( $(stat -c %s "$swap_path" 2>/dev/null || stat -f %z "$swap_path" 2>/dev/null) / 1024 / 1024 ))
+        actual_size_mb=$(( $(stat -c %s "$swap_path" 2>/dev/null || stat -f %z "$swap_path" 2>/dev/null || ls -l "$swap_path" | awk '{print $5}') / 1024 / 1024 ))
     else
-        actual_size_mb=$(ls -l "$swap_path" | awk '{print $5/1024/1024}')
+        actual_size_mb=$(ls -l "$swap_path" 2>/dev/null | awk '{print $5/1024/1024}')
     fi
 
     min_allowed=$((swap_size_mb - 200))
@@ -336,7 +360,7 @@ add_swap_core(){
     fi
 
     echo -e "${GREEN}格式化Swap文件...${FONT}"
-    if ! mkswap "$swap_path"; then
+    if ! mkswap "$swap_path" 2>&1; then
         echo -e "${RED}错误：格式化失败！${FONT}"
         log_error "mkswap失败：${swap_path}"
         rm -f "$swap_path"
@@ -345,11 +369,12 @@ add_swap_core(){
     fi
 
     echo -e "${GREEN}启用Swap文件...${FONT}"
-    if ! swapon "$swap_path"; then
+    if ! swapon "$swap_path" 2>&1; then
         echo -e "${RED}错误：启用失败！${FONT}"
         log_error "swapon失败：${swap_path}"
         [ "$FS_TYPE" = "btrfs" ] && echo -e "${YELLOW}提示：执行 chattr +C ${swap_path} 重试${FONT}"
         echo -e "${YELLOW}文件已保留，请手动排查问题${FONT}"
+        echo -e "${YELLOW}提示：在LVM系统上，可能需要调整文件系统挂载选项${FONT}"
         sleep "$SLEEP_TIME"
         return 0
     fi
@@ -367,7 +392,7 @@ add_swap_core(){
     fi
 
     echo -e "\n${GREEN}================ Swap创建成功 ================${FONT}"
-    free -h | grep -E "Mem|Swap|内存|交换"
+    free -h | head -n 3  # 显示前3行，避免grep正则表达式问题
     log_info "Swap创建成功：${swap_path} ${swap_size}GB"
     sleep $((SLEEP_TIME + 1))
 }
@@ -405,7 +430,7 @@ del_swap(){
         clean_fstab_swap_custom "$swap_path" >/dev/null
         sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || echo -e "${YELLOW}警告：缓存释放失败${FONT}"
         echo -e "\n${GREEN}================ Swap删除成功 ================${FONT}"
-        free -h | grep -E "Mem|Swap|内存|交换"
+        free -h | head -n 3  # 显示前3行，避免grep正则表达式问题
         log_info "Swap删除成功：${swap_path}"
         sleep $((SLEEP_TIME + 1))
     else
@@ -415,13 +440,14 @@ del_swap(){
 }
 show_swap_status(){
     echo -e "\n${GREEN}=== Swap详细状态 ===${FONT}"
-    swapon --show || echo "暂无启用的Swap"
+    swapon --show 2>/dev/null || echo "暂无启用的Swap"
     echo -e "\n${GREEN}=== 内存/Swap总览 ===${FONT}"
     free -h
     echo -e "\n${GREEN}=== fstab中Swap配置 ===${FONT}"
-    grep -E "swap|交换" /etc/fstab || echo "fstab中无Swap配置"
-    echo -e "\n${GREEN}=== 根目录文件系统信息 ===${FONT}"
-    df -T / | grep /
+    grep -E "swap|交换" /etc/fstab 2>/dev/null || echo "fstab中无Swap配置"
+    echo -e "\n${GREEN}=== 目标目录文件系统信息 ===${FONT}"
+    # 显示更详细的文件系统信息，避免grep在LVM系统上出现问题
+    df -T / 2>/dev/null | tail -n +2 || df -h /
     echo ""
     log_info "用户查看Swap状态"
     sleep $((SLEEP_TIME + 1))
