@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-# Linux VPS 一键Swap管理脚本（最终精简优化版）v1.3
-# 功能特性：btrfs适配 | 自定义路径 | 路径自动补全 | 空间检测 | 开机自启 | 权限校验
-# 适用系统：Debian/Ubuntu/CentOS/RHEL/Armbian等主流Linux发行版
+# Swap管理脚本 v1.4
 
-# 终端颜色定义（确保所有终端解析）
+# 终端颜色定义
 GREEN="\033[32m"
 YELLOW="\033[33m"
-RED="\033[31m" 
+RED="\033[31m"
 FONT="\033[0m"
 
 # 全局配置
@@ -19,6 +17,7 @@ log_info(){
     local msg="$1"
     printf "[%s] [INFO] %s\n" "$(date +'%Y-%m-%d %H:%M:%S')" "$msg" >> "$LOG_FILE"
 }
+
 log_error(){
     local msg="$1"
     printf "[%s] [ERROR] %s\n" "$(date +'%Y-%m-%d %H:%M:%S')" "$msg" >> "$LOG_FILE"
@@ -28,51 +27,14 @@ log_error(){
 trap 'echo -e "${FONT}"; exit 0' EXIT INT TERM
 
 # ===================== 工具函数 =====================
-escape_path(){
-    local path="$1"
-    # 使用更简单的方法转义路径，避免在ARM系统上出现问题
-    # 只转义 / . 和 & 这几个关键字符
-    local escaped=""
-    local i=0
-    local char
-    local len=${#path}
-
-    while [ $i -lt $len ]; do
-        char="${path:$i:1}"
-        case "$char" in
-            \/|\&|\.) escaped="${escaped}\\${char}" ;;
-            *) escaped="${escaped}${char}" ;;
-        esac
-        i=$((i + 1))
-    done
-
-    echo "$escaped"
-}
+# 简化的路径标准化函数
 normalize_path(){
     local path="$1"
-    # 使用更简单的方法规范化路径，避免连续的斜杠
-    local normalized=""
-    local last_was_slash=0
-    local i=0
-    local char
-    local len=${#path}
-
-    while [ $i -lt $len ]; do
-        char="${path:$i:1}"
-        if [ "$char" = "/" ]; then
-            if [ $last_was_slash -eq 0 ]; then
-                normalized="${normalized}${char}"
-            fi
-            last_was_slash=1
-        else
-            normalized="${normalized}${char}"
-            last_was_slash=0
-        fi
-        i=$((i + 1))
-    done
-
-    echo "$normalized"
+    # 移除重复的斜杠
+    echo "$path" | tr -s '/'
 }
+
+# 检查目录是否可写
 check_dir_writable(){
     local dir="$1"
     [ ! -w "$dir" ] && {
@@ -83,16 +45,17 @@ check_dir_writable(){
     return 0
 }
 
-# ===================== 基础校验 =====================
 # 检查Swap是否已激活
 check_swap_active(){
     local path="$1"
-    swapon --show | grep -q "$path" && {
+    if swapon --show 2>/dev/null | grep -qF "$path"; then
         echo -e "${YELLOW}警告：${path}已是活动的Swap${FONT}"
         return 1
-    }
+    fi
     return 0
 }
+
+# ===================== 基础校验 =====================
 check_root(){
     [[ $EUID -ne 0 ]] && {
         echo -e "${RED}错误：请以root权限运行脚本！${FONT}"
@@ -100,16 +63,18 @@ check_root(){
         exit 1
     }
 }
+
 check_commands(){
-    local required_cmds=("free" "dd" "mkswap" "swapon" "swapoff" "grep" "sed" "bc" "stat" "df" "chattr" "truncate" "dirname")
+    local required_cmds=("free" "dd" "mkswap" "swapon" "swapoff" "grep" "bc" "stat" "df" "chattr" "truncate" "dirname")
     for cmd in "${required_cmds[@]}"; do
-        command -v "$cmd" >/dev/null 2>&1 || {
+        if ! command -v "$cmd" >/dev/null 2>&1; then
             echo -e "${RED}错误：缺少必要命令${cmd}！${FONT}"
             log_error "缺少命令${cmd}"
             exit 1
-        }
+        fi
     done
 }
+
 check_ovz(){
     [[ -d "/proc/vz" ]] && {
         echo -e "${RED}错误：OpenVZ架构不支持创建Swap！${FONT}"
@@ -117,6 +82,7 @@ check_ovz(){
         exit 1
     }
 }
+
 check_abs_path(){
     local path="$1"
     [[ ! "$path" =~ ^/ ]] && {
@@ -129,7 +95,8 @@ check_abs_path(){
         log_error "输入目录作为swap路径：${path}"
         return 1
     }
-    local dir=$(dirname "$path")
+    local dir
+    dir=$(dirname "$path")
     [[ ! -d "$dir" ]] && {
         echo -e "${RED}错误：目录${dir}不存在！${FONT}"
         log_error "目录${dir}不存在"
@@ -143,17 +110,14 @@ check_abs_path(){
     return 0
 }
 
-# ===================== 路径补全（核心修复根目录+颜色码） =====================
+# ===================== 路径补全 =====================
 auto_complete_swap_path(){
     local input_dir swap_path confirm
 
     echo -e "\n${YELLOW}=== 路径自动补全 - 输入Swap存放目录 ===${FONT}"
     read -p "请输入Swap存放的绝对目录（以/开头）:" input_dir
 
-    echo -e "${YELLOW}输入的目录：${input_dir}${FONT}"
-    log_info "用户输入目录：${input_dir}"
-
-    # 校验绝对目录格式（使用更高效的方式）
+    # 校验绝对目录格式
     [[ "${input_dir:0:1}" != "/" ]] && {
         echo -e "${RED}错误：请输入以/开头的绝对目录！${FONT}"
         log_error "输入非绝对目录：${input_dir}"
@@ -161,10 +125,8 @@ auto_complete_swap_path(){
         return 1
     }
 
-    # 标准化路径（关键：根目录/处理后仍为/）
-    echo -e "${YELLOW}正在标准化路径...${FONT}"
+    # 标准化路径
     input_dir=$(normalize_path "$input_dir")
-    echo -e "${YELLOW}标准化后的路径：${input_dir}${FONT}"
 
     # 校验目录存在
     [[ ! -d "$input_dir" ]] && {
@@ -173,7 +135,6 @@ auto_complete_swap_path(){
         sleep "$SLEEP_TIME"
         return 1
     }
-    echo -e "${GREEN}目录存在${FONT}"
 
     # 校验目录可写
     check_dir_writable "$input_dir" || {
@@ -181,16 +142,14 @@ auto_complete_swap_path(){
         return 1
     }
 
-    # 强制生成路径（核心：根目录/拼接后为/swapfile，必显示，无跳过）
+    # 生成Swap文件路径
     swap_path="${input_dir}/swapfile"
-    # 强制显示路径，颜色区分，适配所有目录（包括/）
     echo -e "\n${YELLOW}即将生成的Swap文件绝对路径：${FONT}${GREEN}${swap_path}${FONT}"
 
-    # 修复颜色码乱码：拆分read和颜色提示，用echo -e解析转义
+    # 确认
     echo -e -n "${YELLOW}输入y/Y确认，其他键返回主菜单：${FONT}"
     read confirm
 
-    # 确认逻辑
     [[ "$confirm" =~ ^[yY]$ ]] || {
         echo -e "\n${YELLOW}取消操作，返回主菜单...${FONT}"
         log_info "用户取消路径确认"
@@ -208,7 +167,7 @@ auto_complete_swap_path(){
 get_mem_info(){
     local mem_total_bytes swap_total_bytes
 
-    # 使用更兼容的方式获取内存信息，优先匹配英文
+    # 获取内存信息
     if free -b >/dev/null 2>&1; then
         mem_total_bytes=$(free -b | awk '/^Mem:/ {print $2}')
         swap_total_bytes=$(free -b | awk '/^Swap:/ {print $2}')
@@ -217,7 +176,7 @@ get_mem_info(){
         swap_total_bytes=$(free | awk '/^Swap:/ {print $2*1024}')
     fi
 
-    # 防止空值导致的计算错误
+    # 防止空值
     [[ -z "$mem_total_bytes" || "$mem_total_bytes" -eq 0 ]] && {
         mem_total_bytes=4294967296  # 默认4GB
         echo -e "${YELLOW}警告：无法检测内存大小，使用默认值4GB${FONT}"
@@ -230,33 +189,27 @@ get_mem_info(){
 
     SWAP_TOTAL_GB=$(echo "scale=0; ($swap_total_bytes + 536870912) / 1073741824" | bc)
 }
+
 get_fs_type(){
     local target_path="$1"
-    local df_output line
+    local df_output
 
-    # 先检查 df 命令是否可用
-    if ! command -v df >/dev/null 2>&1; then
-        FS_TYPE="unknown"
-        echo -e "${YELLOW}检测到文件系统：${FS_TYPE}${FONT}"
-        log_info "目标路径文件系统：${FS_TYPE}"
-        return
-    fi
+    # 使用最简单可靠的方法获取文件系统类型
+    # 方法1: 直接从 df 输出获取第2列
+    df_output=$(timeout 5 df -T "$target_path" 2>/dev/null | tail -n +2 | head -n 1)
 
-    # 使用最简单的方法获取文件系统类型，避免所有正则表达式
-    # 方法1: 使用 -T 参数
-    df_output=$(df -T "$target_path" 2>/dev/null | tail -n +2 | head -n 1)
     if [[ -n "$df_output" ]]; then
-        # 直接获取第2列（文件系统类型），不使用任何正则表达式
-        FS_TYPE=$(echo "$df_output" | awk '{print $2}')
+        # 使用最简单的方法获取第2列，不使用任何复杂的逻辑
+        FS_TYPE=$(echo "$df_output" | cut -d' ' -f2)
         [[ -z "$FS_TYPE" ]] && FS_TYPE="unknown"
     else
-        # 方法2: 回退到 findmnt
+        # 方法2: 使用 findmnt（如果可用）
         if command -v findmnt >/dev/null 2>&1; then
-            FS_TYPE=$(findmnt -n -o FSTYPE "$target_path" 2>/dev/null)
+            FS_TYPE=$(timeout 5 findmnt -n -o FSTYPE "$target_path" 2>/dev/null)
             [[ -z "$FS_TYPE" ]] && FS_TYPE="unknown"
         else
-            # 方法3: 使用 mount 命令
-            FS_TYPE=$(mount | grep " $target_path " | awk '{print $5}' 2>/dev/null)
+            # 方法3: 从 /etc/fstab 或 /proc/mounts 获取
+            FS_TYPE=$(cat /proc/mounts 2>/dev/null | grep " $target_path " | awk '{print $3}')
             [[ -z "$FS_TYPE" ]] && FS_TYPE="unknown"
         fi
     fi
@@ -264,6 +217,7 @@ get_fs_type(){
     echo -e "${YELLOW}检测到文件系统：${FS_TYPE}${FONT}"
     log_info "目标路径文件系统：${FS_TYPE}"
 }
+
 clean_fstab_swap_custom(){
     local swap_path="$1"
     local backup_file temp_fstab
@@ -278,9 +232,8 @@ clean_fstab_swap_custom(){
         return 1
     fi
 
-    # 使用更简单的方法删除fstab中的swap配置，避免sed正则表达式问题
+    # 使用最简单的方法：grep -v 过滤
     if grep -F "$swap_path" /etc/fstab >/dev/null 2>&1; then
-        # 使用grep -v来过滤掉包含swap_path的行
         grep -v -F "$swap_path" /etc/fstab > "$temp_fstab" 2>/dev/null
         if [ $? -eq 0 ] && [ -s "$temp_fstab" ]; then
             cp "$temp_fstab" /etc/fstab
@@ -305,6 +258,7 @@ clean_fstab_swap_custom(){
 add_swap(){
     add_swap_core "/swapfile"
 }
+
 add_swap_advanced(){
     local swap_path
     echo -e "\n${YELLOW}=== 高级模式 - 自定义路径添加Swap ===${FONT}"
@@ -312,10 +266,11 @@ add_swap_advanced(){
     [[ -z "$swap_path" ]] && return 0
     add_swap_core "$swap_path"
 }
+
 add_swap_core(){
     local swap_path="$1"
     local swap_size swap_size_mb block_size block_count
-    local target_dir avail_space safe_space_mb
+    local target_dir avail_space_mb safe_space_mb
     local actual_size_mb min_allowed max_allowed
     local confirm_big backup_file df_output
 
@@ -357,24 +312,18 @@ add_swap_core(){
     target_dir=$(dirname "$swap_path")
     echo -e "${YELLOW}正在检测${target_dir}的可用空间...${FONT}"
 
-    # 使用更兼容的方式获取可用空间，避免在ARM/LVM系统上出现问题
-    # 先尝试使用 -M 参数
-    echo -e "${YELLOW}执行: df -BM ${target_dir}${FONT}"
-    df_output=$(timeout 5 df -BM "$target_dir" 2>&1 | tail -n +2 | head -n 1)
-    echo -e "${YELLOW}df输出: ${df_output}${FONT}"
+    # 磁盘空间检测
+    df_output=$(timeout 10 df -BM "$target_dir" 2>&1 | tail -n +2 | head -n 1)
 
-    if [[ -n "$df_output" ]] && [[ "$df_output" != *"timeout"* ]]; then
+    if [[ -n "$df_output" ]] && [[ "$df_output" != *"timeout"* ]] && [[ "$df_output" != *"error"* ]]; then
         avail_space_mb=$(echo "$df_output" | awk '{print $4}' | sed 's/M//')
         echo -e "${GREEN}可用空间：${avail_space_mb}MB${FONT}"
     else
-        # 回退方案：不使用 -M 参数
-        echo -e "${YELLOW}回退方案：执行 df ${target_dir}${FONT}"
-        df_output=$(timeout 5 df "$target_dir" 2>&1 | tail -n +2 | head -n 1)
-        echo -e "${YELLOW}df输出: ${df_output}${FONT}"
-
+        # 回退方案
+        echo -e "${YELLOW}使用回退方案检测磁盘空间...${FONT}"
+        df_output=$(timeout 10 df "$target_dir" 2>&1 | tail -n +2 | head -n 1)
         if [[ -n "$df_output" ]] && [[ "$df_output" != *"timeout"* ]]; then
-            avail_space=$(echo "$df_output" | awk '{print $4}')
-            avail_space_mb=$((avail_space / 1024))
+            avail_space_mb=$(echo "$df_output" | awk '{print int($4/1024)}')
             echo -e "${GREEN}可用空间：${avail_space_mb}MB${FONT}"
         else
             echo -e "${RED}错误：无法检测${target_dir}的可用空间！${FONT}"
@@ -392,7 +341,7 @@ add_swap_core(){
         return 0
     }
 
-    # 备份fstab并获取备份文件名
+    # 备份fstab
     backup_file=$(clean_fstab_swap_custom "$swap_path")
     [[ -z "$backup_file" ]] && {
         echo -e "${RED}错误：无法备份fstab！${FONT}"
@@ -426,12 +375,8 @@ add_swap_core(){
         return 0
     }
 
-    # 使用更兼容的文件大小获取方式
-    if command -v stat >/dev/null 2>&1; then
-        actual_size_mb=$(( $(stat -c %s "$swap_path" 2>/dev/null || stat -f %z "$swap_path" 2>/dev/null || ls -l "$swap_path" | awk '{print $5}') / 1024 / 1024 ))
-    else
-        actual_size_mb=$(ls -l "$swap_path" 2>/dev/null | awk '{print $5/1024/1024}')
-    fi
+    # 获取文件大小
+    actual_size_mb=$(( $(stat -c %s "$swap_path" 2>/dev/null || stat -f %z "$swap_path" 2>/dev/null || ls -l "$swap_path" 2>/dev/null | awk '{print $5}') / 1024 / 1024 ))
 
     min_allowed=$((swap_size_mb - 200))
     max_allowed=$((swap_size_mb + 200))
@@ -444,7 +389,7 @@ add_swap_core(){
     fi
     [ "$actual_size_mb" -ne "$swap_size_mb" ] && echo -e "${YELLOW}提示：大小偏差为文件系统块对齐，不影响使用${FONT}"
 
-    # 设置文件权限并验证
+    # 设置文件权限
     if ! chmod 600 "$swap_path"; then
         echo -e "${RED}错误：无法设置文件权限！${FONT}"
         log_error "chmod失败：${swap_path}"
@@ -453,6 +398,7 @@ add_swap_core(){
         return 0
     fi
 
+    # 格式化Swap文件
     echo -e "${GREEN}格式化Swap文件...${FONT}"
     if ! mkswap "$swap_path" 2>&1; then
         echo -e "${RED}错误：格式化失败！${FONT}"
@@ -462,17 +408,18 @@ add_swap_core(){
         return 0
     fi
 
+    # 启用Swap文件
     echo -e "${GREEN}启用Swap文件...${FONT}"
     if ! swapon "$swap_path" 2>&1; then
         echo -e "${RED}错误：启用失败！${FONT}"
         log_error "swapon失败：${swap_path}"
         [ "$FS_TYPE" = "btrfs" ] && echo -e "${YELLOW}提示：执行 chattr +C ${swap_path} 重试${FONT}"
         echo -e "${YELLOW}文件已保留，请手动排查问题${FONT}"
-        echo -e "${YELLOW}提示：在LVM系统上，可能需要调整文件系统挂载选项${FONT}"
         sleep "$SLEEP_TIME"
         return 0
     fi
 
+    # 配置开机自启
     echo -e "${GREEN}配置开机自启...${FONT}"
     echo "${swap_path} none swap defaults 0 0" >> /etc/fstab
     if ! mount -a >/dev/null 2>&1; then
@@ -486,10 +433,11 @@ add_swap_core(){
     fi
 
     echo -e "\n${GREEN}================ Swap创建成功 ================${FONT}"
-    free -h | head -n 3  # 显示前3行，避免grep正则表达式问题
+    free -h | head -n 3
     log_info "Swap创建成功：${swap_path} ${swap_size}GB"
     sleep $((SLEEP_TIME + 1))
 }
+
 del_swap(){
     local swap_path
 
@@ -519,13 +467,13 @@ del_swap(){
         echo -e "${YELLOW}未找到Swap文件${swap_path}${FONT}"
     fi
 
-    # 使用更简单的方法检查fstab，避免grep正则表达式问题
+    # 检查fstab中是否有配置
     if grep -F "$swap_path" /etc/fstab >/dev/null 2>&1; then
         echo -e "${GREEN}清理fstab中${swap_path}配置...${FONT}"
         clean_fstab_swap_custom "$swap_path" >/dev/null
         sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || echo -e "${YELLOW}警告：缓存释放失败${FONT}"
         echo -e "\n${GREEN}================ Swap删除成功 ================${FONT}"
-        free -h | head -n 3  # 显示前3行，避免grep正则表达式问题
+        free -h | head -n 3
         log_info "Swap删除成功：${swap_path}"
         sleep $((SLEEP_TIME + 1))
     else
@@ -533,20 +481,19 @@ del_swap(){
         sleep "$SLEEP_TIME"
     fi
 }
+
 show_swap_status(){
     echo -e "\n${GREEN}=== Swap详细状态 ===${FONT}"
     swapon --show 2>/dev/null || echo "暂无启用的Swap"
     echo -e "\n${GREEN}=== 内存/Swap总览 ===${FONT}"
     free -h
     echo -e "\n${GREEN}=== fstab中Swap配置 ===${FONT}"
-    # 使用更简单的方法查找Swap配置，避免grep正则表达式问题
     if grep -i swap /etc/fstab 2>/dev/null; then
-        : # 找到了，不需要额外操作
+        : # 找到了
     else
         echo "fstab中无Swap配置"
     fi
-    echo -e "\n${GREEN}=== 目标目录文件系统信息 ===${FONT}"
-    # 显示更详细的文件系统信息，避免grep在LVM系统上出现问题
+    echo -e "\n${GREEN}=== 根目录文件系统信息 ===${FONT}"
     df -T / 2>/dev/null | tail -n +2 || df -h /
     echo ""
     log_info "用户查看Swap状态"
@@ -561,7 +508,6 @@ main_menu(){
     check_commands
     check_ovz
 
-    # 使用循环代替递归，避免递归深度过大
     while true; do
         clear
         get_mem_info
@@ -585,7 +531,8 @@ main_menu(){
         fi
 
         [[ ! "$choice" =~ ^[0-4]$ ]] && {
-            echo -e "\n${RED}错误：请输入0-4之间的有效数字！${FONT}"
+            clear
+            echo -e "${RED}错误：请输入0-4之间的有效数字！${FONT}"
             log_error "无效输入：${choice}"
             sleep "$SLEEP_TIME"
             continue
@@ -610,7 +557,7 @@ main_menu(){
     done
 }
 
-# 初始化日志（设置安全权限）
+# 初始化日志
 touch "$LOG_FILE" 2>/dev/null && chmod 600 "$LOG_FILE" 2>/dev/null || {
     echo -e "${YELLOW}警告：无法创建/设置日志文件权限，继续执行...${FONT}"
 }
