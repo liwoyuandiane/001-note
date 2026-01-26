@@ -131,7 +131,6 @@ check_abs_path(){
 # 返回值: 确认后的Swap文件绝对路径（空值表示取消操作）
 auto_complete_swap_path(){
     echo -e "\n${YELLOW}=== 路径自动补全 - 输入Swap存放目录 ===${FONT}"
-    echo -e "${YELLOW}提示：输入绝对目录后，自动生成文件路径为 [目录]/swapfile${FONT}"
     read -p "请输入Swap存放的绝对目录（以/开头）:" INPUT_DIR
 
     # 校验绝对目录格式
@@ -158,21 +157,21 @@ auto_complete_swap_path(){
         return 1
     }
 
-    # 生成最终Swap文件路径
+    # 生成最终Swap文件路径（核心：确保路径拼接正确）
     local SWAP_PATH="${INPUT_DIR}/swapfile"
-    # ========== 核心修改点：调整提示文本为你要求的样式 ==========
-    echo -e "\n即将生成文件为：${GREEN}${SWAP_PATH}${FONT}"
-    read -p "输入y/Y确认，其他键返回主菜单:" CONFIRM
+    # ========== 修复核心：强制换行+清晰显示完整路径 ==========
+    echo -e "\n${YELLOW}即将生成的Swap文件绝对路径：${FONT}${GREEN}${SWAP_PATH}${FONT}"
+    read -p "${YELLOW}输入y/Y确认，其他键返回主菜单：${FONT}" CONFIRM
 
     # 用户确认逻辑
     [[ "$CONFIRM" =~ ^[yY]$ ]] || {
-        echo -e "${YELLOW}取消操作，返回主菜单...${FONT}"
+        echo -e "\n${YELLOW}取消操作，返回主菜单...${FONT}"
         log_info "用户取消路径确认"
         sleep 1
         return 1
     }
 
-    echo -e "${GREEN}确认路径：${SWAP_PATH}${FONT}"
+    echo -e "\n${GREEN}已确认路径：${SWAP_PATH}${FONT}"
     log_info "用户确认Swap文件路径：${SWAP_PATH}"
     echo "$SWAP_PATH"
     return 0
