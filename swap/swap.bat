@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Linux VPS 一键Swap管理脚本（最终精简优化版）v1.1
+# Linux VPS 一键Swap管理脚本（最终精简优化版）v1.2
 # 功能特性：btrfs适配 | 自定义路径 | 路径自动补全 | 空间检测 | 开机自启 | 权限校验
 # 适用系统：Debian/Ubuntu/CentOS/RHEL/Armbian等主流Linux发行版
 
@@ -30,11 +30,48 @@ trap 'echo -e "${FONT}"; exit 0' EXIT INT TERM
 # ===================== 工具函数 =====================
 escape_path(){
     local path="$1"
-    echo "$path" | sed 's/[\/&*.^$]/\\&/g'
+    # 使用更简单的方法转义路径，避免在ARM系统上出现问题
+    # 只转义 / . 和 & 这几个关键字符
+    local escaped=""
+    local i=0
+    local char
+    local len=${#path}
+
+    while [ $i -lt $len ]; do
+        char="${path:$i:1}"
+        case "$char" in
+            \/|\&|\.) escaped="${escaped}\\${char}" ;;
+            *) escaped="${escaped}${char}" ;;
+        esac
+        i=$((i + 1))
+    done
+
+    echo "$escaped"
 }
 normalize_path(){
     local path="$1"
-    echo "$path" | sed 's/\/\+/\//g'
+    # 使用更简单的方法规范化路径，避免连续的斜杠
+    local normalized=""
+    local last_was_slash=0
+    local i=0
+    local char
+    local len=${#path}
+
+    while [ $i -lt $len ]; do
+        char="${path:$i:1}"
+        if [ "$char" = "/" ]; then
+            if [ $last_was_slash -eq 0 ]; then
+                normalized="${normalized}${char}"
+            fi
+            last_was_slash=1
+        else
+            normalized="${normalized}${char}"
+            last_was_slash=0
+        fi
+        i=$((i + 1))
+    done
+
+    echo "$normalized"
 }
 check_dir_writable(){
     local dir="$1"
@@ -113,6 +150,9 @@ auto_complete_swap_path(){
     echo -e "\n${YELLOW}=== 路径自动补全 - 输入Swap存放目录 ===${FONT}"
     read -p "请输入Swap存放的绝对目录（以/开头）:" input_dir
 
+    echo -e "${YELLOW}输入的目录：${input_dir}${FONT}"
+    log_info "用户输入目录：${input_dir}"
+
     # 校验绝对目录格式（使用更高效的方式）
     [[ "${input_dir:0:1}" != "/" ]] && {
         echo -e "${RED}错误：请输入以/开头的绝对目录！${FONT}"
@@ -122,7 +162,10 @@ auto_complete_swap_path(){
     }
 
     # 标准化路径（关键：根目录/处理后仍为/）
+    echo -e "${YELLOW}正在标准化路径...${FONT}"
     input_dir=$(normalize_path "$input_dir")
+    echo -e "${YELLOW}标准化后的路径：${input_dir}${FONT}"
+
     # 校验目录存在
     [[ ! -d "$input_dir" ]] && {
         echo -e "${RED}错误：目录${input_dir}不存在！${FONT}"
@@ -130,6 +173,8 @@ auto_complete_swap_path(){
         sleep "$SLEEP_TIME"
         return 1
     }
+    echo -e "${GREEN}目录存在${FONT}"
+
     # 校验目录可写
     check_dir_writable "$input_dir" || {
         sleep "$SLEEP_TIME"
@@ -195,10 +240,10 @@ get_fs_type(){
 }
 clean_fstab_swap_custom(){
     local swap_path="$1"
-    local escaped_path backup_file
+    local backup_file temp_fstab
 
-    escaped_path=$(escape_path "$swap_path")
     backup_file="${BACKUP_PREFIX}.$(date +%Y%m%d%H%M%S)"
+    temp_fstab="/tmp/fstab_clean.$$"
 
     if ! cp /etc/fstab "/etc/${backup_file}"; then
         echo -e "${RED}错误：无法备份fstab！${FONT}"
@@ -207,9 +252,21 @@ clean_fstab_swap_custom(){
         return 1
     fi
 
-    if ! sed -i "/${escaped_path}/d" /etc/fstab; then
-        echo -e "${YELLOW}警告：清理fstab配置失败，已保留备份${FONT}"
-        log_error "清理fstab失败"
+    # 使用更简单的方法删除fstab中的swap配置，避免sed正则表达式问题
+    if grep -F "$swap_path" /etc/fstab >/dev/null 2>&1; then
+        # 使用grep -v来过滤掉包含swap_path的行
+        grep -v -F "$swap_path" /etc/fstab > "$temp_fstab" 2>/dev/null
+        if [ $? -eq 0 ] && [ -s "$temp_fstab" ]; then
+            cp "$temp_fstab" /etc/fstab
+            rm -f "$temp_fstab"
+        else
+            echo -e "${YELLOW}警告：清理fstab配置失败，已保留备份${FONT}"
+            log_error "清理fstab失败"
+            rm -f "$temp_fstab"
+            return 1
+        fi
+    else
+        echo -e "${YELLOW}fstab中未找到${swap_path}配置${FONT}"
     fi
 
     echo -e "${GREEN}已清理fstab配置（备份：/etc/${backup_file}）${FONT}"
@@ -272,16 +329,27 @@ add_swap_core(){
     [ $((swap_size_mb % block_size)) -ne 0 ] && block_count=$((block_count + 1))
 
     target_dir=$(dirname "$swap_path")
+    echo -e "${YELLOW}正在检测${target_dir}的可用空间...${FONT}"
+
     # 使用更兼容的方式获取可用空间，避免在ARM/LVM系统上出现问题
-    df_output=$(df -BM "$target_dir" 2>/dev/null | tail -n +2 | head -n 1)
-    if [[ -n "$df_output" ]]; then
+    # 先尝试使用 -M 参数
+    echo -e "${YELLOW}执行: df -BM ${target_dir}${FONT}"
+    df_output=$(timeout 5 df -BM "$target_dir" 2>&1 | tail -n +2 | head -n 1)
+    echo -e "${YELLOW}df输出: ${df_output}${FONT}"
+
+    if [[ -n "$df_output" ]] && [[ "$df_output" != *"timeout"* ]]; then
         avail_space_mb=$(echo "$df_output" | awk '{print $4}' | sed 's/M//')
+        echo -e "${GREEN}可用空间：${avail_space_mb}MB${FONT}"
     else
         # 回退方案：不使用 -M 参数
-        df_output=$(df "$target_dir" 2>/dev/null | tail -n +2 | head -n 1)
-        if [[ -n "$df_output" ]]; then
+        echo -e "${YELLOW}回退方案：执行 df ${target_dir}${FONT}"
+        df_output=$(timeout 5 df "$target_dir" 2>&1 | tail -n +2 | head -n 1)
+        echo -e "${YELLOW}df输出: ${df_output}${FONT}"
+
+        if [[ -n "$df_output" ]] && [[ "$df_output" != *"timeout"* ]]; then
             avail_space=$(echo "$df_output" | awk '{print $4}')
             avail_space_mb=$((avail_space / 1024))
+            echo -e "${GREEN}可用空间：${avail_space_mb}MB${FONT}"
         else
             echo -e "${RED}错误：无法检测${target_dir}的可用空间！${FONT}"
             log_error "无法检测磁盘空间"
@@ -425,7 +493,8 @@ del_swap(){
         echo -e "${YELLOW}未找到Swap文件${swap_path}${FONT}"
     fi
 
-    if grep -q "$(escape_path "$swap_path")" /etc/fstab; then
+    # 使用更简单的方法检查fstab，避免grep正则表达式问题
+    if grep -F "$swap_path" /etc/fstab >/dev/null 2>&1; then
         echo -e "${GREEN}清理fstab中${swap_path}配置...${FONT}"
         clean_fstab_swap_custom "$swap_path" >/dev/null
         sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || echo -e "${YELLOW}警告：缓存释放失败${FONT}"
@@ -444,7 +513,12 @@ show_swap_status(){
     echo -e "\n${GREEN}=== 内存/Swap总览 ===${FONT}"
     free -h
     echo -e "\n${GREEN}=== fstab中Swap配置 ===${FONT}"
-    grep -E "swap|交换" /etc/fstab 2>/dev/null || echo "fstab中无Swap配置"
+    # 使用更简单的方法查找Swap配置，避免grep正则表达式问题
+    if grep -i swap /etc/fstab 2>/dev/null; then
+        : # 找到了，不需要额外操作
+    else
+        echo "fstab中无Swap配置"
+    fi
     echo -e "\n${GREEN}=== 目标目录文件系统信息 ===${FONT}"
     # 显示更详细的文件系统信息，避免grep在LVM系统上出现问题
     df -T / 2>/dev/null | tail -n +2 || df -h /
