@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Linux VPS 一键Swap管理脚本（最终精简优化版）
+# Linux VPS 一键Swap管理脚本（最终精简优化版） v1.0
 # 功能特性：btrfs适配 | 自定义路径 | 路径自动补全 | 空间检测 | 开机自启 | 权限校验
 # 适用系统：Debian/Ubuntu/CentOS/RHEL/Armbian等主流Linux发行版
 
