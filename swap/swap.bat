@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Linux VPS 一键Swap管理脚本（最终精简优化版）v1.2
+# Linux VPS 一键Swap管理脚本（最终精简优化版）v1.3
 # 功能特性：btrfs适配 | 自定义路径 | 路径自动补全 | 空间检测 | 开机自启 | 权限校验
 # 适用系统：Debian/Ubuntu/CentOS/RHEL/Armbian等主流Linux发行版
 
@@ -232,9 +232,35 @@ get_mem_info(){
 }
 get_fs_type(){
     local target_path="$1"
-    # 使用更兼容的awk语法，避免出现"Unmatched ["错误
-    FS_TYPE=$(df -T "$target_path" 2>/dev/null | awk 'NR>1 {if ($1 !~ /tmpfs/) {print $2; exit}}')
-    [[ -z "$FS_TYPE" ]] && FS_TYPE="unknown"
+    local df_output line
+
+    # 先检查 df 命令是否可用
+    if ! command -v df >/dev/null 2>&1; then
+        FS_TYPE="unknown"
+        echo -e "${YELLOW}检测到文件系统：${FS_TYPE}${FONT}"
+        log_info "目标路径文件系统：${FS_TYPE}"
+        return
+    fi
+
+    # 使用最简单的方法获取文件系统类型，避免所有正则表达式
+    # 方法1: 使用 -T 参数
+    df_output=$(df -T "$target_path" 2>/dev/null | tail -n +2 | head -n 1)
+    if [[ -n "$df_output" ]]; then
+        # 直接获取第2列（文件系统类型），不使用任何正则表达式
+        FS_TYPE=$(echo "$df_output" | awk '{print $2}')
+        [[ -z "$FS_TYPE" ]] && FS_TYPE="unknown"
+    else
+        # 方法2: 回退到 findmnt
+        if command -v findmnt >/dev/null 2>&1; then
+            FS_TYPE=$(findmnt -n -o FSTYPE "$target_path" 2>/dev/null)
+            [[ -z "$FS_TYPE" ]] && FS_TYPE="unknown"
+        else
+            # 方法3: 使用 mount 命令
+            FS_TYPE=$(mount | grep " $target_path " | awk '{print $5}' 2>/dev/null)
+            [[ -z "$FS_TYPE" ]] && FS_TYPE="unknown"
+        fi
+    fi
+
     echo -e "${YELLOW}检测到文件系统：${FS_TYPE}${FONT}"
     log_info "目标路径文件系统：${FS_TYPE}"
 }
