@@ -117,6 +117,9 @@ auto_complete_swap_path(){
     echo -e "\n${YELLOW}=== 路径自动补全 - 输入Swap存放目录 ===${FONT}"
     read -p "请输入Swap存放的绝对目录（以/开头）:" input_dir
 
+    echo -e "${YELLOW}调试：输入的路径 = ${input_dir}${FONT}"
+    log_info "用户输入目录：${input_dir}"
+
     # 校验绝对目录格式
     [[ "${input_dir:0:1}" != "/" ]] && {
         echo -e "${RED}错误：请输入以/开头的绝对目录！${FONT}"
@@ -127,6 +130,7 @@ auto_complete_swap_path(){
 
     # 标准化路径
     input_dir=$(normalize_path "$input_dir")
+    echo -e "${YELLOW}调试：标准化后的路径 = ${input_dir}${FONT}"
 
     # 校验目录存在
     [[ ! -d "$input_dir" ]] && {
@@ -135,6 +139,8 @@ auto_complete_swap_path(){
         sleep "$SLEEP_TIME"
         return 1
     }
+
+    echo -e "${GREEN}目录存在${FONT}"
 
     # 校验目录可写
     check_dir_writable "$input_dir" || {
@@ -145,6 +151,8 @@ auto_complete_swap_path(){
     # 生成Swap文件路径
     swap_path="${input_dir}/swapfile"
     echo -e "\n${YELLOW}即将生成的Swap文件绝对路径：${FONT}${GREEN}${swap_path}${FONT}"
+    echo -e "${YELLOW}调试：swap文件路径 = ${swap_path}${FONT}"
+    echo -e "${YELLOW}调试：swap文件所在目录 = $(dirname "$swap_path")${FONT}"
 
     # 确认
     echo -e -n "${YELLOW}输入y/Y确认，其他键返回主菜单：${FONT}"
@@ -194,9 +202,13 @@ get_fs_type(){
     local target_path="$1"
     local df_output
 
+    echo -e "${YELLOW}调试：正在检测路径 ${target_path} 的文件系统...${FONT}"
+
     # 使用最简单可靠的方法获取文件系统类型
     # 方法1: 直接从 df 输出获取第2列
     df_output=$(timeout 5 df -T "$target_path" 2>/dev/null | tail -n +2 | head -n 1)
+
+    echo -e "${YELLOW}调试：df 输出 = ${df_output}${FONT}"
 
     if [[ -n "$df_output" ]]; then
         # 使用最简单的方法获取第2列，不使用任何复杂的逻辑
