@@ -160,7 +160,8 @@ auto_complete_swap_path(){
 
     # 生成最终Swap文件路径
     local SWAP_PATH="${INPUT_DIR}/swapfile"
-    echo -e "\n${GREEN}即将创建Swap文件：${SWAP_PATH}${FONT}"
+    # ========== 核心修改点：调整提示文本为你要求的样式 ==========
+    echo -e "\n即将生成文件为：${GREEN}${SWAP_PATH}${FONT}"
     read -p "输入y/Y确认，其他键返回主菜单:" CONFIRM
 
     # 用户确认逻辑
