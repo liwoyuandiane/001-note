@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Swap管理脚本 v1.4
+# Swap管理脚本 ARM/LVM 系统修复版本（终极版 - 简化路径处理）
 
 # 终端颜色定义
 GREEN="\033[32m"
@@ -45,6 +45,44 @@ check_dir_writable(){
     return 0
 }
 
+# 检查目录是否存在且可访问（增强版 - 支持LVM/RAID）
+check_dir_accessible(){
+    local dir="$1"
+    
+    # 首先检查目录是否存在
+    if [[ ! -d "$dir" ]]; then
+        echo -e "${RED}错误：目录${dir}不存在！${FONT}"
+        log_error "目录${dir}不存在"
+        return 1
+    fi
+    
+    # 检查目录是否可写
+    if [[ ! -w "$dir" ]]; then
+        echo -e "${RED}错误：目录${dir}不可写！${FONT}"
+        log_error "目录${dir}无写入权限"
+        return 1
+    fi
+    
+    # 检查目录是否可读
+    if [[ ! -r "$dir" ]]; then
+        echo -e "${RED}错误：目录${dir}不可读！${FONT}"
+        log_error "目录${dir}无读取权限"
+        return 1
+    fi
+    
+    # 在目录中尝试创建临时文件以确认实际写入权限
+    local test_file="$dir/.swap_test_$$.tmp"
+    if ! touch "$test_file" 2>/dev/null; then
+        echo -e "${RED}错误：无法在目录${dir}中创建文件！可能存在权限或存储限制${FONT}"
+        log_error "无法在目录${dir}中创建文件"
+        return 1
+    else
+        rm -f "$test_file" 2>/dev/null
+    fi
+    
+    return 0
+}
+
 # 检查Swap是否已激活
 check_swap_active(){
     local path="$1"
@@ -83,30 +121,91 @@ check_ovz(){
     }
 }
 
-check_abs_path(){
-    local path="$1"
-    [[ ! "$path" =~ ^/ ]] && {
-        echo -e "${RED}错误：请输入以/开头的绝对路径！${FONT}"
-        log_error "输入非绝对路径：${path}"
+# 获取文件系统类型（增强版 - 支持LVM/RAID等复杂存储）
+get_fs_type(){
+    local target_path="$1"
+    FS_TYPE="ext4"  # 默认ext4
+
+    # 尝试多种方法获取文件系统类型
+    if [[ -d "$target_path" ]]; then
+        # 方法1: 使用stat获取文件系统类型
+        local dev_num
+        dev_num=$(stat -c %d "$target_path" 2>/dev/null)
+        
+        # 方法2: 通过df命令获取
+        local df_line
+        df_line=$(df -T "$target_path" 2>/dev/null | grep -E "^(/dev|/dev/mapper|/dev/md)")
+        
+        if [[ -n "$df_line" ]]; then
+            FS_TYPE=$(echo "$df_line" | awk '{print $2}')
+        else
+            # 方法3: 使用findmnt获取
+            local fs_from_findmnt
+            fs_from_findmnt=$(findmnt -n -o FSTYPE -T swap "$target_path" 2>/dev/null || findmnt -n -o FSTYPE "$target_path" 2>/dev/null)
+            if [[ -n "$fs_from_findmnt" ]]; then
+                FS_TYPE="$fs_from_findmnt"
+            fi
+        fi
+    elif [[ -f "$target_path" ]]; then
+        # 如果是文件，获取其所在目录的文件系统
+        local parent_dir
+        parent_dir=$(dirname "$target_path")
+        local df_line
+        df_line=$(df -T "$parent_dir" 2>/dev/null | grep -E "^(/dev|/dev/mapper|/dev/md)")
+        
+        if [[ -n "$df_line" ]]; then
+            FS_TYPE=$(echo "$df_line" | awk '{print $2}')
+        else
+            # 方法3: 使用findmnt获取
+            local fs_from_findmnt
+            fs_from_findmnt=$(findmnt -n -o FSTYPE "$parent_dir" 2>/dev/null)
+            if [[ -n "$fs_from_findmnt" ]]; then
+                FS_TYPE="$fs_from_findmnt"
+            fi
+        fi
+    fi
+    
+    # 确保FS_TYPE不是空的
+    [[ -z "$FS_TYPE" || "$FS_TYPE" == "unknown" ]] && FS_TYPE="ext4"
+    
+    echo -e "${YELLOW}检测到文件系统：${FS_TYPE}${FONT}"
+    log_info "目标路径文件系统：${FS_TYPE} (路径: $target_path)"
+}
+
+# 清理fstab配置
+clean_fstab_swap_custom(){
+    local swap_path="$1"
+    local backup_file temp_fstab
+
+    backup_file="${BACKUP_PREFIX}.$(date +%Y%m%d%H%M%S)"
+    temp_fstab="/tmp/fstab_clean.$$"
+
+    if ! cp /etc/fstab "/etc/${backup_file}"; then
+        echo -e "${RED}错误：无法备份fstab！${FONT}"
+        log_error "备份fstab失败"
+        echo ""
         return 1
-    }
-    [[ -d "$path" ]] && {
-        echo -e "${RED}错误：${path}是目录！请输入文件路径${FONT}"
-        log_error "输入目录作为swap路径：${path}"
-        return 1
-    }
-    local dir
-    dir=$(dirname "$path")
-    [[ ! -d "$dir" ]] && {
-        echo -e "${RED}错误：目录${dir}不存在！${FONT}"
-        log_error "目录${dir}不存在"
-        return 1
-    }
-    check_dir_writable "$dir" || return 1
-    [[ -f "$path" ]] && {
-        echo -e "${YELLOW}警告：文件${path}已存在，将覆盖！${FONT}"
-        log_info "文件${path}已存在，准备覆盖"
-    }
+    fi
+
+    # 使用最简单的方法：grep -v 过滤
+    if grep -F "$swap_path" /etc/fstab >/dev/null 2>&1; then
+        grep -v -F "$swap_path" /etc/fstab > "$temp_fstab" 2>/dev/null
+        if [ $? -eq 0 ] && [ -s "$temp_fstab" ]; then
+            cp "$temp_fstab" /etc/fstab
+            rm -f "$temp_fstab"
+        else
+            echo -e "${YELLOW}警告：清理fstab配置失败，已保留备份${FONT}"
+            log_error "清理fstab失败"
+            rm -f "$temp_fstab"
+            return 1
+        fi
+    else
+        echo -e "${YELLOW}fstab中未找到${swap_path}配置${FONT}"
+    fi
+
+    echo -e "${GREEN}已清理fstab配置（备份：/etc/${backup_file}）${FONT}"
+    log_info "清理fstab中${swap_path}，备份：${backup_file}"
+    echo "$backup_file"
     return 0
 }
 
@@ -115,10 +214,9 @@ auto_complete_swap_path(){
     local input_dir swap_path confirm
 
     echo -e "\n${YELLOW}=== 路径自动补全 - 输入Swap存放目录 ===${FONT}"
-    read -p "请输入Swap存放的绝对目录（以/开头）:" input_dir
 
-    echo -e "${YELLOW}调试：输入的路径 = ${input_dir}${FONT}"
-    log_info "用户输入目录：${input_dir}"
+    # 使用IFS读取整行
+    IFS= read -r -p "请输入Swap存放的绝对目录（以/开头）:" input_dir
 
     # 校验绝对目录格式
     [[ "${input_dir:0:1}" != "/" ]] && {
@@ -130,20 +228,9 @@ auto_complete_swap_path(){
 
     # 标准化路径
     input_dir=$(normalize_path "$input_dir")
-    echo -e "${YELLOW}调试：标准化后的路径 = ${input_dir}${FONT}"
 
-    # 校验目录存在
-    [[ ! -d "$input_dir" ]] && {
-        echo -e "${RED}错误：目录${input_dir}不存在！${FONT}"
-        log_error "目录${input_dir}不存在"
-        sleep "$SLEEP_TIME"
-        return 1
-    }
-
-    echo -e "${GREEN}目录存在${FONT}"
-
-    # 校验目录可写
-    check_dir_writable "$input_dir" || {
+    # 使用增强版目录检查
+    check_dir_accessible "$input_dir" || {
         sleep "$SLEEP_TIME"
         return 1
     }
@@ -151,8 +238,6 @@ auto_complete_swap_path(){
     # 生成Swap文件路径
     swap_path="${input_dir}/swapfile"
     echo -e "\n${YELLOW}即将生成的Swap文件绝对路径：${FONT}${GREEN}${swap_path}${FONT}"
-    echo -e "${YELLOW}调试：swap文件路径 = ${swap_path}${FONT}"
-    echo -e "${YELLOW}调试：swap文件所在目录 = $(dirname "$swap_path")${FONT}"
 
     # 确认
     echo -e -n "${YELLOW}输入y/Y确认，其他键返回主菜单：${FONT}"
@@ -198,74 +283,6 @@ get_mem_info(){
     SWAP_TOTAL_GB=$(echo "scale=0; ($swap_total_bytes + 536870912) / 1073741824" | bc)
 }
 
-get_fs_type(){
-    local target_path="$1"
-    local df_output
-
-    echo -e "${YELLOW}调试：正在检测路径 ${target_path} 的文件系统...${FONT}"
-
-    # 使用最简单可靠的方法获取文件系统类型
-    # 方法1: 直接从 df 输出获取第2列
-    df_output=$(timeout 5 df -T "$target_path" 2>/dev/null | tail -n +2 | head -n 1)
-
-    echo -e "${YELLOW}调试：df 输出 = ${df_output}${FONT}"
-
-    if [[ -n "$df_output" ]]; then
-        # 使用最简单的方法获取第2列，不使用任何复杂的逻辑
-        FS_TYPE=$(echo "$df_output" | cut -d' ' -f2)
-        [[ -z "$FS_TYPE" ]] && FS_TYPE="unknown"
-    else
-        # 方法2: 使用 findmnt（如果可用）
-        if command -v findmnt >/dev/null 2>&1; then
-            FS_TYPE=$(timeout 5 findmnt -n -o FSTYPE "$target_path" 2>/dev/null)
-            [[ -z "$FS_TYPE" ]] && FS_TYPE="unknown"
-        else
-            # 方法3: 从 /etc/fstab 或 /proc/mounts 获取
-            FS_TYPE=$(cat /proc/mounts 2>/dev/null | grep " $target_path " | awk '{print $3}')
-            [[ -z "$FS_TYPE" ]] && FS_TYPE="unknown"
-        fi
-    fi
-
-    echo -e "${YELLOW}检测到文件系统：${FS_TYPE}${FONT}"
-    log_info "目标路径文件系统：${FS_TYPE}"
-}
-
-clean_fstab_swap_custom(){
-    local swap_path="$1"
-    local backup_file temp_fstab
-
-    backup_file="${BACKUP_PREFIX}.$(date +%Y%m%d%H%M%S)"
-    temp_fstab="/tmp/fstab_clean.$$"
-
-    if ! cp /etc/fstab "/etc/${backup_file}"; then
-        echo -e "${RED}错误：无法备份fstab！${FONT}"
-        log_error "备份fstab失败"
-        echo ""
-        return 1
-    fi
-
-    # 使用最简单的方法：grep -v 过滤
-    if grep -F "$swap_path" /etc/fstab >/dev/null 2>&1; then
-        grep -v -F "$swap_path" /etc/fstab > "$temp_fstab" 2>/dev/null
-        if [ $? -eq 0 ] && [ -s "$temp_fstab" ]; then
-            cp "$temp_fstab" /etc/fstab
-            rm -f "$temp_fstab"
-        else
-            echo -e "${YELLOW}警告：清理fstab配置失败，已保留备份${FONT}"
-            log_error "清理fstab失败"
-            rm -f "$temp_fstab"
-            return 1
-        fi
-    else
-        echo -e "${YELLOW}fstab中未找到${swap_path}配置${FONT}"
-    fi
-
-    echo -e "${GREEN}已清理fstab配置（备份：/etc/${backup_file}）${FONT}"
-    log_info "清理fstab中${swap_path}，备份：${backup_file}"
-    echo "$backup_file"
-    return 0
-}
-
 # ===================== 核心功能 =====================
 add_swap(){
     add_swap_core "/swapfile"
@@ -286,6 +303,15 @@ add_swap_core(){
     local actual_size_mb min_allowed max_allowed
     local confirm_big backup_file df_output
 
+    echo -e "${YELLOW}Swap路径：${swap_path}${FONT}"
+
+    # 直接获取swap文件所在目录，使用参数展开避免变量问题
+    local dir_path
+    dir_path="${swap_path%/*}"
+    [[ "$dir_path" == "$swap_path" ]] && dir_path="${swap_path%/*}"
+
+    echo -e "${YELLOW}目录路径：${dir_path}${FONT}"
+
     # 检查Swap是否已激活
     check_swap_active "$swap_path" || {
         echo -e "${YELLOW}警告：${swap_path}已是活动的Swap，如需重建请先删除${FONT}"
@@ -294,7 +320,7 @@ add_swap_core(){
     }
 
     get_mem_info
-    get_fs_type "$(dirname "$swap_path")"
+    get_fs_type "$dir_path"
     echo -e "\n${GREEN}=== 当前系统信息 ===${FONT}"
     echo -e "${GREEN}物理内存：${MEM_TOTAL_GB}GB | 当前Swap：${SWAP_TOTAL_GB}GB${FONT}"
     echo -e "${YELLOW}推荐Swap：${RECOMMENDED_SWAP}GB（内存2倍，最大8GB）${FONT}"
@@ -321,33 +347,56 @@ add_swap_core(){
     block_count=$((swap_size_mb / block_size))
     [ $((swap_size_mb % block_size)) -ne 0 ] && block_count=$((block_count + 1))
 
-    target_dir=$(dirname "$swap_path")
-    echo -e "${YELLOW}正在检测${target_dir}的可用空间...${FONT}"
+    echo -e "${YELLOW}正在检测${dir_path}的可用空间...${FONT}"
 
-    # 磁盘空间检测
-    df_output=$(timeout 10 df -BM "$target_dir" 2>&1 | tail -n +2 | head -n 1)
-
-    if [[ -n "$df_output" ]] && [[ "$df_output" != *"timeout"* ]] && [[ "$df_output" != *"error"* ]]; then
-        avail_space_mb=$(echo "$df_output" | awk '{print $4}' | sed 's/M//')
-        echo -e "${GREEN}可用空间：${avail_space_mb}MB${FONT}"
-    else
-        # 回退方案
-        echo -e "${YELLOW}使用回退方案检测磁盘空间...${FONT}"
-        df_output=$(timeout 10 df "$target_dir" 2>&1 | tail -n +2 | head -n 1)
-        if [[ -n "$df_output" ]] && [[ "$df_output" != *"timeout"* ]]; then
-            avail_space_mb=$(echo "$df_output" | awk '{print int($4/1024)}')
+    # 磁盘空间检测 - 增强版，支持LVM/RAID存储
+    df_output=$(timeout 10 df -BM "$dir_path" 2>&1)
+    
+    # 解析df输出，查找包含目标路径的行（可能有多行输出）
+    if [[ "$df_output" != *"timeout"* ]] && [[ "$df_output" != *"error"* ]]; then
+        # 尝试获取最后一行有效的输出（通常是正确的挂载点信息）
+        avail_space_mb=$(echo "$df_output" | grep -v "df:" | grep "$dir_path" | tail -n 1 | awk '{print $4}' | sed 's/M//')
+        if [[ -n "$avail_space_mb" ]] && [[ "$avail_space_mb" =~ ^[0-9]+$ ]]; then
             echo -e "${GREEN}可用空间：${avail_space_mb}MB${FONT}"
         else
-            echo -e "${RED}错误：无法检测${target_dir}的可用空间！${FONT}"
-            log_error "无法检测磁盘空间"
-            sleep "$SLEEP_TIME"
-            return 0
+            # 如果上面的方法失败，尝试其他解析方法
+            df_output_simple=$(timeout 10 df "$dir_path" 2>&1)
+            avail_space_mb=$(echo "$df_output_simple" | grep -v "df:" | grep "$dir_path" | tail -n 1 | awk '{print int($4/1024)}')
+            if [[ -n "$avail_space_mb" ]] && [[ "$avail_space_mb" =~ ^[0-9]+$ ]]; then
+                echo -e "${GREEN}可用空间：${avail_space_mb}MB${FONT}"
+            else
+                # 最后的备选方案：使用findmnt获取磁盘空间信息
+                echo -e "${YELLOW}使用备选方案检测磁盘空间...${FONT}"
+                local mount_point
+                mount_point=$(df "$dir_path" 2>/dev/null | tail -n 1 | awk '{print $6}' 2>/dev/null)
+                if [[ -n "$mount_point" ]]; then
+                    avail_space_mb=$(df -BM "$mount_point" 2>/dev/null | grep -v "Mounted on" | awk '{print $4}' | sed 's/M//' | tail -n 1)
+                    if [[ -n "$avail_space_mb" ]] && [[ "$avail_space_mb" =~ ^[0-9]+$ ]]; then
+                        echo -e "${GREEN}可用空间：${avail_space_mb}MB${FONT}"
+                    else
+                        echo -e "${RED}错误：无法检测${dir_path}的可用空间！${FONT}"
+                        log_error "无法检测磁盘空间"
+                        sleep "$SLEEP_TIME"
+                        return 0
+                    fi
+                else
+                    echo -e "${RED}错误：无法检测${dir_path}的可用空间！${FONT}"
+                    log_error "无法检测磁盘空间"
+                    sleep "$SLEEP_TIME"
+                    return 0
+                fi
+            fi
         fi
+    else
+        echo -e "${RED}错误：无法检测${dir_path}的可用空间！${FONT}"
+        log_error "无法检测磁盘空间"
+        sleep "$SLEEP_TIME"
+        return 0
     fi
 
     safe_space_mb=$((avail_space_mb - 200))
     [ "$safe_space_mb" -lt "$swap_size_mb" ] && {
-        echo -e "${RED}错误：${target_dir}空间不足！可用${avail_space_mb}MB，需要${swap_size_mb}MB${FONT}"
+        echo -e "${RED}错误：${dir_path}空间不足！可用${avail_space_mb}MB，需要${swap_size_mb}MB${FONT}"
         log_error "目标目录空间不足"
         sleep "$SLEEP_TIME"
         return 0
@@ -457,7 +506,23 @@ del_swap(){
     read -p "请输入Swap文件绝对路径（默认 /swapfile）:" swap_path
     swap_path=${swap_path:-/swapfile}
 
-    check_abs_path "$swap_path" || {
+    [[ ! "$swap_path" =~ ^/ ]] && {
+        echo -e "${RED}错误：请输入以/开头的绝对路径！${FONT}"
+        log_error "输入非绝对路径：${swap_path}"
+        sleep "$SLEEP_TIME"
+        return 0
+    }
+
+    [[ -d "$swap_path" ]] && {
+        echo -e "${RED}错误：${swap_path}是目录！请输入文件路径${FONT}"
+        log_error "输入目录作为swap路径：${swap_path}"
+        sleep "$SLEEP_TIME"
+        return 0
+    }
+
+    local dir
+    dir=$(dirname "$swap_path")
+    check_dir_accessible "$dir" || {
         sleep "$SLEEP_TIME"
         return 0
     }
