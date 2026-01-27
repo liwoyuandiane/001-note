@@ -20,13 +20,13 @@
 ```bash
 bash -lc 'curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/main/opencode-server-cloudflared/opencode-server-cloudflared.sh -o opencode.sh && \
 chmod +x opencode.sh && \
-bash ./opencode.sh install -t YOUR_CF_TOKEN -p 56780 -u opencode -P "Admin@12345678"'
+bash ./opencode.sh install -p 56780 -u opencode -P "Admin@12345678" -t YOUR_CF_TOKEN'
 ```
 - 从本地保存后执行（单行命令）：
 ```bash
 bash -lc 'curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/main/opencode-server-cloudflared/opencode-server-cloudflared.sh -o opencode.sh && \
 chmod +x opencode.sh && \
-bash ./opencode.sh install -t YOUR_CF_TOKEN -p 56780 -u opencode -P "Admin@12345678"'
+bash ./opencode.sh install -p 56780 -u opencode -P "Admin@12345678" -t YOUR_CF_TOKEN'
 ```
 - 仅用于离线下载的单行版本请参考文件内的内联清单。
 
