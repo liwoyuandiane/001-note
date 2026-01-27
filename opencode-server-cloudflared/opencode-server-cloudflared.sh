@@ -49,10 +49,11 @@ print_help() {
     echo "Options:"
     echo "  -p, --port <port>         OpenCode 服务端口 (默认: 56780)"
     echo "  -u, --user <username>     登录用户名 (默认: opencode)"
-    echo "  -P, --password <password> 登录密码 (必填)"
-    echo "  -t, --token <token>       Cloudflare Tunnel 密钥 (必填)"
+    echo "  -P, --password <password> 登录密码 (可选)"
+    echo "  -t, --token <token>       Cloudflare Tunnel 密钥"
     echo ""
     echo "Examples:"
+    echo "  $0 install -t eyJh..."
     echo "  $0 install -P YourPassword123 -t eyJh..."
     echo "  $0 install -p 8080 -u admin -P YourPassword123 -t eyJh..."
     echo "  $0 status"
@@ -153,11 +154,6 @@ start_services() {
     OPENCODE_PASSWORD="$3"
     CLOUDFLARED_TOKEN="$4"
 
-    if [ -z "$OPENCODE_PASSWORD" ]; then
-        log_error "必须指定密码 (-P 或 --password)"
-        exit 1
-    fi
-
     if [ -z "$CLOUDFLARED_TOKEN" ]; then
         log_error "必须指定 Cloudflare Tunnel 密钥 (-t 或 --token)"
         exit 1
@@ -166,9 +162,15 @@ start_services() {
     log_info "开始安装和启动服务..."
     echo ""
 
-    export OPENCODE_SERVER_USERNAME="$OPENCODE_USER"
-    export OPENCODE_SERVER_PASSWORD="$OPENCODE_PASSWORD"
     export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+
+    if [ -n "$OPENCODE_USER" ]; then
+        export OPENCODE_SERVER_USERNAME="$OPENCODE_USER"
+    fi
+
+    if [ -n "$OPENCODE_PASSWORD" ]; then
+        export OPENCODE_SERVER_PASSWORD="$OPENCODE_PASSWORD"
+    fi
 
     check_root
     check_dependencies

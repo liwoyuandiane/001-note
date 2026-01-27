@@ -8,7 +8,7 @@
 
 - 一键安装 OpenCode 服务端
 - 自动下载并配置 Cloudflare Tunnel (cloudflared)
-- 支持自定义端口、用户名、密码
+- 支持自定义端口、用户名、密码（密码可选）
 - 支持后台持久运行
 - 便捷的服务管理命令（启动、停止、重启、状态查看）
 - 自动生成公网访问链接
@@ -20,7 +20,10 @@
 将以下命令中的参数修改为你的值，然后复制到服务器执行：
 
 ```bash
-# 基本用法（使用默认用户名 opencode）
+# 基本用法（不使用密码）
+bash <(curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/main/opencode-server-cloudflared/opencode-server-cloudflared.sh) install -t 你的cf密钥
+
+# 使用密码
 bash <(curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/main/opencode-server-cloudflared/opencode-server-cloudflared.sh) install -P 你的密码 -t 你的cf密钥
 
 # 自定义端口和用户名
@@ -36,7 +39,10 @@ curl -O https://raw.githubusercontent.com/liwoyuandiane/001-note/main/opencode-s
 # 添加执行权限
 chmod +x opencode-server-cloudflared.sh
 
-# 安装并启动服务
+# 安装并启动服务（不使用密码）
+./opencode-server-cloudflared.sh install -t 你的cf密钥
+
+# 安装并启动服务（使用密码）
 ./opencode-server-cloudflared.sh install -P 你的密码 -t 你的cf密钥
 ```
 
@@ -46,28 +52,31 @@ chmod +x opencode-server-cloudflared.sh
 |------|------|--------|----------|
 | `-p, --port` | OpenCode 服务端口 | 56780 | 否 |
 | `-u, --user` | 登录用户名 | opencode | 否 |
-| `-P, --password` | 登录密码 | - | **是** |
+| `-P, --password` | 登录密码 | - | 否 |
 | `-t, --token` | Cloudflare Tunnel 密钥 | - | **是** |
 
 ## 使用示例
 
 ```bash
-# 示例 1：最小参数安装
+# 示例 1：无密码安装
+./opencode-server-cloudflared.sh install -t eyJh...
+
+# 示例 2：使用密码安装
 ./opencode-server-cloudflared.sh install -P MyPassword123 -t eyJh...
 
-# 示例 2：自定义端口和用户名
+# 示例 3：自定义端口和用户名
 ./opencode-server-cloudflared.sh install -p 8080 -u admin -P MyPassword123 -t eyJh...
 
-# 示例 3：查看服务状态
+# 示例 4：查看服务状态
 ./opencode-server-cloudflared.sh status
 
-# 示例 4：停止服务
+# 示例 5：停止服务
 ./opencode-server-cloudflared.sh stop
 
-# 示例 5：重启服务
+# 示例 6：重启服务
 ./opencode-server-cloudflared.sh restart
 
-# 示例 6：查看帮助
+# 示例 7：查看帮助
 ./opencode-server-cloudflared.sh --help
 ```
 
@@ -79,7 +88,7 @@ chmod +x opencode-server-cloudflared.sh
 4. 选择 **Cloudflare** 作为类型
 5. 复制生成的隧道密钥（以 `eyJh` 开头）
 
-或者使用 quick tunnel（临时使用）：
+或者使用 quick tunnel（临时使用，无需密钥）：
 
 ```bash
 # 安装 cloudflared
@@ -131,7 +140,7 @@ https://xxxxx.trycloudflare.com
 
 - **服务器地址**：`https://xxxxx.trycloudflare.com`
 - **用户名**：`opencode`（或自定义）
-- **密码**：你设置的密码
+- **密码**：如果你设置了密码则需要填写，否则留空
 
 ## 日志文件
 
@@ -169,7 +178,7 @@ netstat -tlnp | grep 56780
 
 # 3. 重新安装
 ./opencode-server-cloudflared.sh stop
-./opencode-server-cloudflared.sh install -P 你的密码 -t 你的cf密钥
+./opencode-server-cloudflared.sh install -t 你的cf密钥
 ```
 
 ### Q: 如何修改端口或密码？
