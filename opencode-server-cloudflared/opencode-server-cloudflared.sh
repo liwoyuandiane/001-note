@@ -102,12 +102,13 @@ check_dependencies() {
 }
 
 install_opencode() {
+    mkdir -p "$OPENCODE_DIR" 2>/dev/null || true
     log_info "安装 OpenCode..."
 
     if command -v opencode &> /dev/null; then
         log_success "OpenCode 已安装"
     else
-        curl -fsSL https://opencode.ai/install | bash > /dev/null 2>&1
+        curl -fsSL https://opencode.ai/install | bash 2>&1 | tee -a "$OPENCODE_LOG_FILE"
         export PATH="$HOME/.local/bin:$PATH"
 
         if command -v opencode &> /dev/null; then
