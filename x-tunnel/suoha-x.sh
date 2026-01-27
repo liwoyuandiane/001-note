@@ -1,8 +1,10 @@
 #!/bin/bash
-# suoha x-tunnel - 双模式版（支持Cloudflare固定隧道）
+# suoha x-tunnel - 双模式版（完善Cloudflare固定隧道支持）
 # 使用方式1（交互式）：./suoha-x.sh
 # 使用方式2（参数驱动）：
-#   ./suoha-x.sh install [-o 0|1] [-c 4|6] [-x xtoken] [-t cftoken]  # -t为cloudflared固定隧道令牌
+#   ./suoha-x.sh install [-o 0|1] [-c 4|6] [-x xtoken] [-t cftoken] [-d cfdomain]
+#     -t: cloudflared固定隧道令牌
+#     -d: 固定隧道绑定的自定义域名（必填，若用-t）
 #   ./suoha-x.sh stop                                   # 停止服务
 #   ./suoha-x.sh remove                                 # 清空缓存/卸载
 #   ./suoha-x.sh status                                 # 查看运行状态
@@ -16,8 +18,9 @@ linux_install=("apt -y install" "apt -y install" "yum -y install" "yum -y instal
 # 默认参数（参数驱动模式用）
 opera=0
 ips=4
-xtoken=""          # 重命名为xtoken，区分cloudflared令牌
-cf_token=""        # 新增：cloudflared固定隧道令牌
+xtoken=""          # x-tunnel的token
+cf_token=""        # cloudflared固定隧道令牌
+cf_domain=""       # 固定隧道绑定的自定义域名（新增）
 country="AM"
 
 # 获取空闲端口
@@ -70,6 +73,24 @@ install_deps() {
     fi
 }
 
+# 生成固定隧道的Ingress配置文件（新增核心函数）
+generate_cf_config() {
+    echo "生成cloudflared固定隧道配置文件..."
+    cat > config.yml << EOF
+tunnel: $(echo $cf_token | cut -d':' -f3 | cut -c1-8)  # 隧道标识（取token片段）
+credentials-file: /root/.cloudflared/${cf_token: -32}.json
+
+ingress:
+  - hostname: $cf_domain
+    service: http://127.0.0.1:$wsport  # 转发到x-tunnel的ws端口
+  - service: http_status:404
+EOF
+    # 创建cloudflared配置目录
+    mkdir -p /root/.cloudflared
+    # 写入token到credentials文件（固定隧道必需）
+    echo "{\"AccountTag\":\"$(echo $cf_token | cut -d':' -f1)\",\"TunnelSecret\":\"$(echo $cf_token | cut -d':' -f2)\",\"TunnelID\":\"$(echo $cf_token | cut -d':' -f3)\"}" > /root/.cloudflared/${cf_token: -32}.json
+}
+
 # 停止所有服务（复用逻辑）
 stop_services() {
     echo "正在停止所有服务..."
@@ -98,10 +119,12 @@ stop_services() {
             sleep 1
         done
     fi
+    # 清理固定隧道配置文件
+    rm -f config.yml
     echo "✅ 所有服务已停止"
 }
 
-# 下载并启动代理程序（核心修改：支持固定隧道）
+# 下载并启动代理程序（核心修改：适配固定隧道）
 quicktunnel() {
     echo "检测CPU架构并下载程序..."
     case "$(uname -m)" in
@@ -159,39 +182,52 @@ quicktunnel() {
     echo "启动Cloudflare隧道..."
     metricsport=$(get_free_port)
     ./cloudflared-linux update >/dev/null 2>&1
-    if [ -n "$cf_token" ]; then
-        # 有cf_token：使用固定隧道（run --token）
-        echo "使用固定隧道模式（已绑定cloudflared令牌）..."
-        screen -dmUS argo ./cloudflared-linux --edge-ip-version $ips --protocol http2 tunnel run --token $cf_token --metrics 0.0.0.0:$metricsport
+
+    if [ -n "$cf_token" ] && [ -n "$cf_domain" ]; then
+        # 有cf_token和cf_domain：使用固定隧道（带Ingress规则）
+        generate_cf_config  # 生成配置文件
+        echo "使用固定隧道模式（已绑定cloudflared令牌和域名）..."
+        screen -dmUS argo ./cloudflared-linux --edge-ip-version $ips --protocol http2 tunnel run --config config.yml --metrics 0.0.0.0:$metricsport
+        
+        # 固定隧道：直接提示用户使用绑定的域名，无需检测userHostname
+        echo "✅ 部署成功！"
+        if [ -z "$xtoken" ]; then
+            echo "访问链接：$cf_domain:443（无x-tunnel token）"
+        else
+            echo "访问链接：$cf_domain:443 | x-tunnel身份令牌：$xtoken"
+        fi
+        echo "隧道类型：固定隧道（重启不失效）"
+        echo "Metrics地址：http://$(curl -4 -s https://www.cloudflare.com/cdn-cgi/trace | grep ip= | cut -d= -f2):$metricsport/metrics"
+    elif [ -n "$cf_token" ] && [ -z "$cf_domain" ]; then
+        # 有token无域名：提示错误
+        echo "❌ 错误：使用固定隧道必须指定绑定的自定义域名（-d参数/交互式输入）！"
+        stop_services
+        exit 1
     else
         # 无cf_token：使用快速隧道（原逻辑）
         echo "使用快速隧道模式（临时隧道，重启失效）..."
         screen -dmUS argo ./cloudflared-linux --edge-ip-version $ips --protocol http2 tunnel --url 127.0.0.1:$wsport --metrics 0.0.0.0:$metricsport
-    fi
 
-    # 提取Argo域名（兼容两种隧道模式）
-    echo "正在获取Argo公网域名..."
-    while true; do
-        RESP=$(curl -s "http://127.0.0.1:$metricsport/metrics")
-        if echo "$RESP" | grep -q 'userHostname='; then
-            DOMAIN=$(echo "$RESP" | grep 'userHostname="' | sed -E 's/.*userHostname="https?:\/\/([^"]+)".*/\1/')
-            echo "✅ 部署成功！"
-            if [ -z "$xtoken" ]; then
-                echo "访问链接：$DOMAIN:443（无x-tunnel token）"
-            else
-                echo "访问链接：$DOMAIN:443 | x-tunnel身份令牌：$xtoken"
-            fi
-            if [ -n "$cf_token" ]; then
-                echo "隧道类型：固定隧道（cloudflared令牌已绑定）"
-            else
+        # 提取快速隧道的临时域名
+        echo "正在获取Argo临时域名..."
+        while true; do
+            RESP=$(curl -s "http://127.0.0.1:$metricsport/metrics")
+            if echo "$RESP" | grep -q 'userHostname='; then
+                DOMAIN=$(echo "$RESP" | grep 'userHostname="' | sed -E 's/.*userHostname="https?:\/\/([^"]+)".*/\1/')
+                echo "✅ 部署成功！"
+                if [ -z "$xtoken" ]; then
+                    echo "访问链接：$DOMAIN:443（无x-tunnel token）"
+                else
+                    echo "访问链接：$DOMAIN:443 | x-tunnel身份令牌：$xtoken"
+                fi
                 echo "隧道类型：快速隧道（重启/重运行失效）"
+                echo "Metrics地址：http://$(curl -4 -s https://www.cloudflare.com/cdn-cgi/trace | grep ip= | cut -d= -f2):$metricsport/metrics"
+                break
+            else
+                sleep 1
             fi
-            echo "Metrics地址：http://$(curl -4 -s https://www.cloudflare.com/cdn-cgi/trace | grep ip= | cut -d= -f2):$metricsport/metrics"
-            break
-        else
-            sleep 1
-        fi
-    done
+        done
+    fi
 }
 
 # 查看服务状态（参数驱动模式用）
@@ -210,13 +246,18 @@ check_status() {
     fi
     if screen -list | grep -q "argo"; then
         echo "cloudflared(argo)：运行中"
-        # 尝试获取域名
-        metricsport=$(ps aux | grep cloudflared-linux | grep metrics | awk -F':' '{print $3}' | awk '{print $1}')
-        if [ ! -z "$metricsport" ]; then
-            RESP=$(curl -s "http://127.0.0.1:$metricsport/metrics")
-            if echo "$RESP" | grep -q 'userHostname='; then
-                DOMAIN=$(echo "$RESP" | grep 'userHostname="' | sed -E 's/.*userHostname="https?:\/\/([^"]+)".*/\1/')
-                echo "Argo公网域名：$DOMAIN:443"
+        # 区分隧道类型显示域名
+        if [ -n "$cf_domain" ]; then
+            echo "绑定域名：$cf_domain（固定隧道）"
+        else
+            # 尝试获取快速隧道域名
+            metricsport=$(ps aux | grep cloudflared-linux | grep metrics | awk -F':' '{print $3}' | awk '{print $1}')
+            if [ ! -z "$metricsport" ]; then
+                RESP=$(curl -s "http://127.0.0.1:$metricsport/metrics")
+                if echo "$RESP" | grep -q 'userHostname='; then
+                    DOMAIN=$(echo "$RESP" | grep 'userHostname="' | sed -E 's/.*userHostname="https?:\/\/([^"]+)".*/\1/')
+                    echo "临时域名：$DOMAIN（快速隧道）"
+                fi
             fi
         fi
     else
@@ -225,7 +266,7 @@ check_status() {
     echo "========================"
 }
 
-# ====================== 2. 原始交互式逻辑（新增cloudflared令牌输入） ======================
+# ====================== 2. 原始交互式逻辑（新增cloudflared域名输入） ======================
 original_interactive() {
     clear
     echo 梭哈模式不需要自己提供域名,使用CF ARGO QUICK TUNNEL创建快速链接
@@ -279,6 +320,14 @@ original_interactive() {
         read -p "请设置x-tunnel的token(可留空):" xtoken
         # 新增：输入cloudflared令牌
         read -p "请设置cloudflared令牌以固定隧道(可选,留空则使用快速隧道):" cf_token
+        # 新增：如果输入了cf_token，必须输入绑定的域名
+        if [ -n "$cf_token" ]; then
+            read -p "请输入固定隧道绑定的自定义域名(必填,如:test.example.com):" cf_domain
+            if [ -z "$cf_domain" ]; then
+                echo "❌ 错误：使用固定隧道必须填写绑定的自定义域名！"
+                exit 1
+            fi
+        fi
 
         # 执行部署流程
         detect_os
@@ -295,7 +344,7 @@ original_interactive() {
         stop_services
         clear
         echo "正在删除程序文件..."
-        rm -rf cloudflared-linux x-tunnel-linux opera-linux
+        rm -rf cloudflared-linux x-tunnel-linux opera-linux config.yml
         echo "✅ 已清空所有缓存文件"
     else
         echo 退出成功
@@ -311,9 +360,9 @@ else
     # 有参数 → 执行参数驱动逻辑
     case "$1" in
         install)
-            # 解析install的子参数（新增-t）
+            # 解析install的子参数（新增-d）
             shift
-            while getopts "o:c:x:t:" opt; do
+            while getopts "o:c:x:t:d:" opt; do
                 case $opt in
                     o)
                         opera=$OPTARG
@@ -332,18 +381,22 @@ else
                         fi
                         ;;
                     x)
-                        xtoken=$OPTARG  # 对应x-tunnel的token
+                        xtoken=$OPTARG  # x-tunnel的token
                         ;;
                     t)
-                        cf_token=$OPTARG # 新增：对应cloudflared的固定隧道令牌
+                        cf_token=$OPTARG # cloudflared固定隧道令牌
+                        ;;
+                    d)
+                        cf_domain=$OPTARG # 固定隧道绑定的自定义域名
                         ;;
                     ?)
                         echo "错误：无效参数！"
-                        echo "使用帮助：./suoha-x.sh install [-o 0|1] [-c 4|6] [-x xtoken] [-t cftoken]"
+                        echo "使用帮助：./suoha-x.sh install [-o 0|1] [-c 4|6] [-x xtoken] [-t cftoken] [-d cfdomain]"
                         echo "  -o：是否启用opera（0/1，默认0）"
                         echo "  -c：IP版本（4/6，默认4）"
                         echo "  -x：x-tunnel的token（可选）"
-                        echo "  -t：cloudflared固定隧道令牌（可选，留空则用快速隧道）"
+                        echo "  -t：cloudflared固定隧道令牌（可选）"
+                        echo "  -d：固定隧道绑定的自定义域名（必填，若用-t）"
                         exit 1
                         ;;
                 esac
@@ -361,7 +414,7 @@ else
         remove)
             stop_services
             echo "正在删除程序文件..."
-            rm -rf cloudflared-linux x-tunnel-linux opera-linux
+            rm -rf cloudflared-linux x-tunnel-linux opera-linux config.yml
             echo "✅ 已清空所有缓存文件"
             ;;
         status)
@@ -372,9 +425,11 @@ else
             echo "使用帮助："
             echo "  交互式模式：./suoha-x.sh"
             echo "  参数驱动模式："
-            echo "    ./suoha-x.sh install [-o 0|1] [-c 4|6] [-x xtoken] [-t cftoken]"
+            echo "    ./suoha-x.sh install [-o 0|1] [-c 4|6] [-x xtoken] [-t cftoken] [-d cfdomain]"
             echo "    ./suoha-x.sh stop/remove/status"
-            echo "  说明：-t为cloudflared固定隧道令牌，留空则使用快速隧道"
+            echo "  说明："
+            echo "    -t：cloudflared固定隧道令牌（需提前在CF后台创建隧道）"
+            echo "    -d：固定隧道绑定的自定义域名（使用-t时必填）"
             exit 1
             ;;
     esac
