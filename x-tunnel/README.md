@@ -16,7 +16,7 @@
 ### 1. 一键下载并执行脚本
 ```bash
 # 方式1：使用 curl 下载
-curl -L https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/x-tunnel/suoha-x.sh -o suoha-x.sh && chmod +x suoha-x.sh
+curl -L https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/x-tunnel/suoha-x.sh && chmod +x suoha-x.sh
 
 # 方式2：使用 wget 下载（若系统无 curl）
 wget https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/x-tunnel/suoha-x.sh && chmod +x suoha-x.sh
