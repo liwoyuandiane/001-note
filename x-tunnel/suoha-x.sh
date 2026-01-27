@@ -1,25 +1,25 @@
 #!/bin/bash
-# suoha x-tunnel - 命令行参数版（支持cloudflared持久化隧道令牌）
-# 使用方式:
-# ./suoha-x.sh install [-o 0|1] [-c 4|6] [-x token值] [-t cloudflared令牌]  # 安装部署
-# ./suoha-x.sh stop                                   # 停止服务
-# ./suoha-x.sh remove                                 # 清空缓存/卸载
-# ./suoha-x.sh status                                 # 查看运行状态
+# suoha x-tunnel - 双模式版（支持Cloudflare固定隧道）
+# 使用方式1（交互式）：./suoha-x.sh
+# 使用方式2（参数驱动）：
+#   ./suoha-x.sh install [-o 0|1] [-c 4|6] [-x xtoken] [-t cftoken]  # -t为cloudflared固定隧道令牌
+#   ./suoha-x.sh stop                                   # 停止服务
+#   ./suoha-x.sh remove                                 # 清空缓存/卸载
+#   ./suoha-x.sh status                                 # 查看运行状态
 
-# ====================== 1. 定义变量和默认值 ======================
+# ====================== 1. 通用变量与核心函数（复用逻辑） ======================
 # 系统适配数组
 linux_os=("Debian" "Ubuntu" "CentOS" "Fedora" "Alpine")
 linux_update=("apt update" "apt update" "yum -y update" "yum -y update" "apk update")
 linux_install=("apt -y install" "apt -y install" "yum -y install" "yum -y install" "apk add -f")
 
-# 默认参数值
-opera=0          # 默认不启用opera代理
-ips=4            # 默认IPv4
-token=""         # x-tunnel的token，默认无
-country="AM"     # opera默认地区
-tunnel_token=""  # cloudflared隧道令牌，默认空（使用临时隧道）
+# 默认参数（参数驱动模式用）
+opera=0
+ips=4
+xtoken=""          # 重命名为xtoken，区分cloudflared令牌
+cf_token=""        # 新增：cloudflared固定隧道令牌
+country="AM"
 
-# ====================== 2. 核心函数定义 ======================
 # 获取空闲端口
 get_free_port() {
     while true; do
@@ -70,7 +70,38 @@ install_deps() {
     fi
 }
 
-# 下载并启动代理程序
+# 停止所有服务（复用逻辑）
+stop_services() {
+    echo "正在停止所有服务..."
+    screen -wipe >/dev/null 2>&1
+    # 停止x-tunnel
+    if screen -list | grep -q "x-tunnel"; then
+        screen -S x-tunnel -X quit
+        while screen -list | grep -q "x-tunnel"; do
+            echo "等待x-tunnel退出..."
+            sleep 1
+        done
+    fi
+    # 停止opera
+    if screen -list | grep -q "opera"; then
+        screen -S opera -X quit
+        while screen -list | grep -q "opera"; do
+            echo "等待opera退出..."
+            sleep 1
+        done
+    fi
+    # 停止argo
+    if screen -list | grep -q "argo"; then
+        screen -S argo -X quit
+        while screen -list | grep -q "argo"; do
+            echo "等待argo退出..."
+            sleep 1
+        done
+    fi
+    echo "✅ 所有服务已停止"
+}
+
+# 下载并启动代理程序（核心修改：支持固定隧道）
 quicktunnel() {
     echo "检测CPU架构并下载程序..."
     case "$(uname -m)" in
@@ -109,7 +140,7 @@ quicktunnel() {
     # 启动x-tunnel
     echo "启动x-tunnel代理..."
     wsport=$(get_free_port)
-    if [ -z "$token" ]; then
+    if [ -z "$xtoken" ]; then
         if [ "$opera" = "1" ]; then
             screen -dmUS x-tunnel ./x-tunnel-linux -l ws://127.0.0.1:$wsport -f socks5://127.0.0.1:$operaport
         else
@@ -117,44 +148,43 @@ quicktunnel() {
         fi
     else
         if [ "$opera" = "1" ]; then
-            screen -dmUS x-tunnel ./x-tunnel-linux -l ws://127.0.0.1:$wsport -token $token -f socks5://127.0.0.1:$operaport
+            screen -dmUS x-tunnel ./x-tunnel-linux -l ws://127.0.0.1:$wsport -token $xtoken -f socks5://127.0.0.1:$operaport
         else
-            screen -dmUS x-tunnel ./x-tunnel-linux -l ws://127.0.0.1:$wsport -token $token
+            screen -dmUS x-tunnel ./x-tunnel-linux -l ws://127.0.0.1:$wsport -token $xtoken
         fi
     fi
     sleep 1
 
-    # 启动cloudflared（区分临时隧道/持久化隧道）
+    # 启动cloudflared（核心修改：区分快速隧道/固定隧道）
     echo "启动Cloudflare隧道..."
     metricsport=$(get_free_port)
     ./cloudflared-linux update >/dev/null 2>&1
-    
-    if [ -n "$tunnel_token" ]; then
-        # 有隧道令牌：使用持久化隧道
-        echo "使用指定的cloudflared令牌启动持久化隧道..."
-        screen -dmUS argo ./cloudflared-linux --edge-ip-version $ips --protocol http2 tunnel run --token "$tunnel_token" --metrics 0.0.0.0:$metricsport
+    if [ -n "$cf_token" ]; then
+        # 有cf_token：使用固定隧道（run --token）
+        echo "使用固定隧道模式（已绑定cloudflared令牌）..."
+        screen -dmUS argo ./cloudflared-linux --edge-ip-version $ips --protocol http2 tunnel run --token $cf_token --metrics 0.0.0.0:$metricsport
     else
-        # 无令牌：使用临时Argo快速隧道
-        echo "启动临时Argo快速隧道..."
+        # 无cf_token：使用快速隧道（原逻辑）
+        echo "使用快速隧道模式（临时隧道，重启失效）..."
         screen -dmUS argo ./cloudflared-linux --edge-ip-version $ips --protocol http2 tunnel --url 127.0.0.1:$wsport --metrics 0.0.0.0:$metricsport
     fi
 
-    # 提取隧道域名（兼容临时/持久化隧道）
-    echo "正在获取Cloudflare隧道公网域名..."
+    # 提取Argo域名（兼容两种隧道模式）
+    echo "正在获取Argo公网域名..."
     while true; do
         RESP=$(curl -s "http://127.0.0.1:$metricsport/metrics")
         if echo "$RESP" | grep -q 'userHostname='; then
             DOMAIN=$(echo "$RESP" | grep 'userHostname="' | sed -E 's/.*userHostname="https?:\/\/([^"]+)".*/\1/')
             echo "✅ 部署成功！"
-            if [ -z "$token" ]; then
+            if [ -z "$xtoken" ]; then
                 echo "访问链接：$DOMAIN:443（无x-tunnel token）"
             else
-                echo "访问链接：$DOMAIN:443 | x-tunnel身份令牌：$token"
+                echo "访问链接：$DOMAIN:443 | x-tunnel身份令牌：$xtoken"
             fi
-            if [ -n "$tunnel_token" ]; then
-                echo "隧道类型：持久化隧道（使用指定令牌）"
+            if [ -n "$cf_token" ]; then
+                echo "隧道类型：固定隧道（cloudflared令牌已绑定）"
             else
-                echo "隧道类型：临时Argo快速隧道（重启失效）"
+                echo "隧道类型：快速隧道（重启/重运行失效）"
             fi
             echo "Metrics地址：http://$(curl -4 -s https://www.cloudflare.com/cdn-cgi/trace | grep ip= | cut -d= -f2):$metricsport/metrics"
             break
@@ -164,38 +194,7 @@ quicktunnel() {
     done
 }
 
-# 停止所有服务
-stop_services() {
-    echo "正在停止所有服务..."
-    screen -wipe >/dev/null 2>&1
-    # 停止x-tunnel
-    if screen -list | grep -q "x-tunnel"; then
-        screen -S x-tunnel -X quit
-        while screen -list | grep -q "x-tunnel"; do
-            echo "等待x-tunnel退出..."
-            sleep 1
-        done
-    fi
-    # 停止opera
-    if screen -list | grep -q "opera"; then
-        screen -S opera -X quit
-        while screen -list | grep -q "opera"; do
-            echo "等待opera退出..."
-            sleep 1
-        done
-    fi
-    # 停止argo
-    if screen -list | grep -q "argo"; then
-        screen -S argo -X quit
-        while screen -list | grep -q "argo"; do
-            echo "等待argo退出..."
-            sleep 1
-        done
-    fi
-    echo "✅ 所有服务已停止"
-}
-
-# 查看服务状态
+# 查看服务状态（参数驱动模式用）
 check_status() {
     echo "===== 服务运行状态 ====="
     # 检查screen进程
@@ -205,108 +204,178 @@ check_status() {
         echo "x-tunnel：已停止"
     fi
     if screen -list | grep -q "opera"; then
-        echo "opera-proxy：运行中（地区：$country）"
+        echo "opera-proxy：运行中"
     else
         echo "opera-proxy：已停止"
     fi
     if screen -list | grep -q "argo"; then
-        echo "cloudflared：运行中（IP版本：IPv$ips）"
+        echo "cloudflared(argo)：运行中"
         # 尝试获取域名
         metricsport=$(ps aux | grep cloudflared-linux | grep metrics | awk -F':' '{print $3}' | awk '{print $1}')
         if [ ! -z "$metricsport" ]; then
             RESP=$(curl -s "http://127.0.0.1:$metricsport/metrics")
             if echo "$RESP" | grep -q 'userHostname='; then
                 DOMAIN=$(echo "$RESP" | grep 'userHostname="' | sed -E 's/.*userHostname="https?:\/\/([^"]+)".*/\1/')
-                echo "Cloudflare隧道域名：$DOMAIN:443"
+                echo "Argo公网域名：$DOMAIN:443"
             fi
         fi
-        # 显示隧道类型
-        if [ -n "$tunnel_token" ]; then
-            echo "隧道类型：持久化隧道（已绑定令牌）"
-        else
-            echo "隧道类型：临时Argo快速隧道"
-        fi
     else
-        echo "cloudflared：已停止"
+        echo "cloudflared(argo)：已停止"
     fi
     echo "========================"
 }
 
-# ====================== 3. 命令行参数解析 ======================
-if [ $# -eq 0 ]; then
-    echo "使用帮助："
-    echo "  ./suoha-x.sh install [-o 0|1] [-c 4|6] [-x token值] [-t cloudflared令牌]  # 安装部署"
-    echo "    -o：是否启用opera代理（0=禁用[默认]，1=启用）"
-    echo "    -c：cloudflared IP版本（4=IPv4[默认]，6=IPv6）"
-    echo "    -x：x-tunnel的身份令牌（可选）"
-    echo "    -t：cloudflared的隧道令牌（可选，设置后使用持久化隧道）"
-    echo "  ./suoha-x.sh stop                                   # 停止所有服务"
-    echo "  ./suoha-x.sh remove                                 # 停止服务并删除程序文件"
-    echo "  ./suoha-x.sh status                                 # 查看服务运行状态"
-    exit 1
-fi
+# ====================== 2. 原始交互式逻辑（新增cloudflared令牌输入） ======================
+original_interactive() {
+    clear
+    echo 梭哈模式不需要自己提供域名,使用CF ARGO QUICK TUNNEL创建快速链接
+    echo 梭哈模式在重启或者脚本再次运行后失效,如果需要使用需要再次运行创建
 
-case "$1" in
-    install)
-        # 解析install的子参数
-        shift
-        while getopts "o:c:x:t:" opt; do
-            case $opt in
-                o)
-                    opera=$OPTARG
-                    # 验证opera参数合法性
-                    if [ "$opera" != "0" ] && [ "$opera" != "1" ]; then
-                        echo "错误：-o参数只能是0或1（0=禁用opera，1=启用opera）"
-                        exit 1
-                    fi
-                    ;;
-                c)
-                    ips=$OPTARG
-                    # 验证IP版本合法性
-                    if [ "$ips" != "4" ] && [ "$ips" != "6" ]; then
-                        echo "错误：-c参数只能是4或6（4=IPv4，6=IPv6）"
-                        exit 1
-                    fi
-                    ;;
-                x)
-                    token=$OPTARG
-                    ;;
-                t)
-                    tunnel_token=$OPTARG
-                    # 验证令牌非空
-                    if [ -z "$tunnel_token" ]; then
-                        echo "错误：-t参数不能为空（需填写cloudflared隧道令牌）"
-                        exit 1
-                    fi
-                    ;;
-                ?)
-                    echo "错误：无效参数，请查看帮助：./suoha-x.sh"
-                    exit 1
-                    ;;
-            esac
-        done
+    echo -e '\n'梭哈是一种智慧!!!梭哈!梭哈!梭哈!梭哈!梭哈!梭哈!梭哈...'\n'
+    echo 1.梭哈模式
+    echo 2.停止服务
+    echo 3.清空缓存
+    echo -e 0.退出脚本'\n'
+    read -p "请选择模式(默认1):" mode
+    if [ -z "$mode" ]; then
+        mode=1
+    fi
 
-        # 执行安装流程
+    if [ $mode == 1 ]; then
+        # 交互式输入参数
+        read -p "是否启用opera前置代理(0.不启用[默认],1.启用):" opera
+        if [ -z "$opera" ]; then
+            opera=0
+        fi
+        if [ "$opera" = "1" ]; then
+            echo 注意:opera前置代理仅支持AM,AS,EU地区
+            echo AM: 北美地区
+            echo AS: 亚太地区
+            echo EU: 欧洲地区
+            read -p "请输入opera前置代理的国家代码(默认AM):" country
+            if [ -z "$country" ]; then
+                country=AM
+            fi
+            country=${country^^}
+            if [ "$country" != "AM" ] && [ "$country" != "AS" ] && [ "$country" != "EU" ]; then
+                echo 请输入正确的opera前置代理国家代码
+                exit 1
+            fi
+        fi
+        if [ "$opera" != "0" ] && [ "$opera" != "1" ]; then
+            echo 请输入正确的opera前置代理模式
+            exit 1
+        fi
+
+        read -p "请选择cloudflared连接模式IPV4或者IPV6(输入4或6,默认4):" ips
+        if [ -z "$ips" ]; then
+            ips=4
+        fi
+        if [ "$ips" != "4" ] && [ "$ips" != "6" ]; then
+            echo 请输入正确的cloudflared连接模式
+            exit 1
+        fi
+
+        read -p "请设置x-tunnel的token(可留空):" xtoken
+        # 新增：输入cloudflared令牌
+        read -p "请设置cloudflared令牌以固定隧道(可选,留空则使用快速隧道):" cf_token
+
+        # 执行部署流程
         detect_os
         install_deps
-        stop_services  # 先停止旧服务
+        stop_services
+        clear
+        sleep 1
         quicktunnel
-        ;;
-    stop)
+
+    elif [ $mode == 2 ]; then
         stop_services
-        ;;
-    remove)
+        clear
+    elif [ $mode == 3 ]; then
         stop_services
+        clear
         echo "正在删除程序文件..."
         rm -rf cloudflared-linux x-tunnel-linux opera-linux
         echo "✅ 已清空所有缓存文件"
-        ;;
-    status)
-        check_status
-        ;;
-    *)
-        echo "错误：无效命令！"
-        echo "使用帮助：./suoha-x.sh"
-        exit 1
-        ;;
-esac
+    else
+        echo 退出成功
+        exit 0
+    fi
+}
+
+# ====================== 3. 主逻辑：判断执行模式（交互式/参数驱动） ======================
+if [ $# -eq 0 ]; then
+    # 无参数 → 执行原始交互式逻辑
+    original_interactive
+else
+    # 有参数 → 执行参数驱动逻辑
+    case "$1" in
+        install)
+            # 解析install的子参数（新增-t）
+            shift
+            while getopts "o:c:x:t:" opt; do
+                case $opt in
+                    o)
+                        opera=$OPTARG
+                        # 验证opera参数合法性
+                        if [ "$opera" != "0" ] && [ "$opera" != "1" ]; then
+                            echo "错误：-o参数只能是0或1（0=禁用opera，1=启用opera）"
+                            exit 1
+                        fi
+                        ;;
+                    c)
+                        ips=$OPTARG
+                        # 验证IP版本合法性
+                        if [ "$ips" != "4" ] && [ "$ips" != "6" ]; then
+                            echo "错误：-c参数只能是4或6（4=IPv4，6=IPv6）"
+                            exit 1
+                        fi
+                        ;;
+                    x)
+                        xtoken=$OPTARG  # 对应x-tunnel的token
+                        ;;
+                    t)
+                        cf_token=$OPTARG # 新增：对应cloudflared的固定隧道令牌
+                        ;;
+                    ?)
+                        echo "错误：无效参数！"
+                        echo "使用帮助：./suoha-x.sh install [-o 0|1] [-c 4|6] [-x xtoken] [-t cftoken]"
+                        echo "  -o：是否启用opera（0/1，默认0）"
+                        echo "  -c：IP版本（4/6，默认4）"
+                        echo "  -x：x-tunnel的token（可选）"
+                        echo "  -t：cloudflared固定隧道令牌（可选，留空则用快速隧道）"
+                        exit 1
+                        ;;
+                esac
+            done
+
+            # 执行安装流程
+            detect_os
+            install_deps
+            stop_services  # 先停止旧服务
+            quicktunnel
+            ;;
+        stop)
+            stop_services
+            ;;
+        remove)
+            stop_services
+            echo "正在删除程序文件..."
+            rm -rf cloudflared-linux x-tunnel-linux opera-linux
+            echo "✅ 已清空所有缓存文件"
+            ;;
+        status)
+            check_status
+            ;;
+        *)
+            echo "错误：无效命令！"
+            echo "使用帮助："
+            echo "  交互式模式：./suoha-x.sh"
+            echo "  参数驱动模式："
+            echo "    ./suoha-x.sh install [-o 0|1] [-c 4|6] [-x xtoken] [-t cftoken]"
+            echo "    ./suoha-x.sh stop/remove/status"
+            echo "  说明：-t为cloudflared固定隧道令牌，留空则使用快速隧道"
+            exit 1
+            ;;
+    esac
+fi
