@@ -21,23 +21,23 @@
 
 ```bash
 # 基本用法（使用默认用户名 opencode）
-bash <(curl -fsSL https://raw.githubusercontent.com/anomalyco/opencode/main/opencode-server-cloudflared.sh) install -P 你的密码 -t 你的cf密钥
+bash <(curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/main/opencode-server-cloudflared/opencode-server-cloudflared.sh) install -P 你的密码 -t 你的cf密钥
 
 # 自定义端口和用户名
-bash <(curl -fsSL https://raw.githubusercontent.com/anomalyco/opencode/main/install-opencode-cloudflared.sh) install -p 56780 -u admin -P 你的密码 -t 你的cf密钥
+bash <(curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/main/opencode-server-cloudflared/opencode-server-cloudflared.sh) install -p 56780 -u admin -P 你的密码 -t 你的cf密钥
 ```
 
 ### 手动下载脚本执行
 
 ```bash
 # 下载脚本
-curl -O https://raw.githubusercontent.com/anomalyco/opencode/main/install-opencode-cloudflared.sh
+curl -O https://raw.githubusercontent.com/liwoyuandiane/001-note/main/opencode-server-cloudflared/opencode-server-cloudflared.sh
 
 # 添加执行权限
-chmod +x install-opencode-cloudflared.sh
+chmod +x opencode-server-cloudflared.sh
 
 # 安装并启动服务
-./install-opencode-cloudflared.sh install -P 你的密码 -t 你的cf密钥
+./opencode-server-cloudflared.sh install -P 你的密码 -t 你的cf密钥
 ```
 
 ## 参数说明
@@ -53,22 +53,22 @@ chmod +x install-opencode-cloudflared.sh
 
 ```bash
 # 示例 1：最小参数安装
-./install-opencode-cloudflared.sh install -P MyPassword123 -t eyJh...
+./opencode-server-cloudflared.sh install -P MyPassword123 -t eyJh...
 
 # 示例 2：自定义端口和用户名
-./install-opencode-cloudflared.sh install -p 8080 -u admin -P MyPassword123 -t eyJh...
+./opencode-server-cloudflared.sh install -p 8080 -u admin -P MyPassword123 -t eyJh...
 
 # 示例 3：查看服务状态
-./install-opencode-cloudflared.sh status
+./opencode-server-cloudflared.sh status
 
 # 示例 4：停止服务
-./install-opencode-cloudflared.sh stop
+./opencode-server-cloudflared.sh stop
 
 # 示例 5：重启服务
-./install-opencode-cloudflared.sh restart
+./opencode-server-cloudflared.sh restart
 
 # 示例 6：查看帮助
-./install-opencode-cloudflared.sh --help
+./opencode-server-cloudflared.sh --help
 ```
 
 ## 获取 Cloudflare Tunnel 密钥
@@ -95,7 +95,7 @@ cloudflared tunnel --url http://localhost:56780
 ### 查看状态
 
 ```bash
-./install-opencode-cloudflared.sh status
+./opencode-server-cloudflared.sh status
 ```
 
 输出示例：
@@ -116,13 +116,13 @@ https://xxxxx.trycloudflare.com
 ### 停止服务
 
 ```bash
-./install-opencode-cloudflared.sh stop
+./opencode-server-cloudflared.sh stop
 ```
 
 ### 重启服务
 
 ```bash
-./install-opencode-cloudflared.sh restart
+./opencode-server-cloudflared.sh restart
 ```
 
 ## Windows 客户端连接
@@ -168,18 +168,18 @@ tail -f ~/.opencode/opencode.log
 netstat -tlnp | grep 56780
 
 # 3. 重新安装
-./install-opencode-cloudflared.sh stop
-./install-opencode-cloudflared.sh install -P 你的密码 -t 你的cf密钥
+./opencode-server-cloudflared.sh stop
+./opencode-server-cloudflared.sh install -P 你的密码 -t 你的cf密钥
 ```
 
 ### Q: 如何修改端口或密码？
 
 ```bash
 # 停止当前服务
-./install-opencode-cloudflared.sh stop
+./opencode-server-cloudflared.sh stop
 
 # 使用新参数重新安装
-./install-opencode-cloudflared.sh install -p 新端口 -u 新用户名 -P 新密码 -t 你的cf密钥
+./opencode-server-cloudflared.sh install -p 新端口 -u 新用户名 -P 新密码 -t 你的cf密钥
 ```
 
 ### Q: cloudflared 下载失败？
