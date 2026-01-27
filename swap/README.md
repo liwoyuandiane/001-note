@@ -2,16 +2,16 @@
 
 描述
 - 基于 Bash 的脚本，用于在 Linux VPS 上管理交换文件（Swap）。
-- 支持添加、删除、查看 Swap；提供高级模式以自定义路径。
-- 保留默认路径 /swapfile 以兼容旧行为，同时通过严格的路径校验提升鲁棒性。
-- 具备备份/回滚机制，适配多种文件系统（如 ext4、btrfs 等），并将日志落地到 /var/log/swap_manager.log 进行审计。
+- 支持添加、删除、查看 Swap；提供高级模式自定义路径。
+- 保留默认路径 /swapfile，保持向后兼容。
+- 提供备份/回滚机制、日志记录，以及对常见文件系统的基本适配。
 
 版本与变更
 - 当前版本：1.7
 - 变更要点（1.7）：保持默认路径、加强路径校验、回滚、日志观测、测试覆盖的改进（向后兼容）
 
 快速开始
-- 环境与前提
+- 环境要求
   - 需要 root 权限运行脚本
   - Bash 环境，依赖常用系统命令（free、dd、mkswap、swapon、swapoff 等）
   - 某些环境可能需要 BusyBox 的兼容性考虑
@@ -36,10 +36,22 @@
   - 删除 Swap：选择 2，输入要删除的 Swap 路径（如 /swapfile）
   - 查看状态：选择 3
 
+一键运行脚本
+- 直接从远程执行（风险提示：请确保环境可信且在测试环境验证通过后再在生产环境执行）
+- 直接一键执行（快速但风险较高）:
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/swap/swap.sh | bash
+  ```
+- 更安全的分步执行：
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/swap/swap.sh -o /tmp/swap.sh
+  bash /tmp/swap.sh
+  ```
+
 核心特性
 - 默认路径保留：/swapfile，保持向后兼容
 - 高级模式：支持自定义绝对路径
-- 路径校验：严格的绝对路径校验、父目录存在性与写权限检查
+- 路径校验：绝对路径、父目录存在性与写权限检查
 - 安全性：修改 /etc/fstab 之前备份，启用后可回滚
 - 权限管理：Swap 文件权限固定为 600
 - 文件系统支持：对 ext4 等文件系统有适配，包含对 btrfs 的 COW 处理等
@@ -58,7 +70,7 @@
 配置与自定义
 - 脚本顶部包含默认常量，便于快速覆盖与定制：
   - DEFAULT_SWAP_PATH="/swapfile"
-  - VERSION="1.6"
+  - VERSION="1.7"
 - 如需自定义行为，可在后续版本引入简单的配置文件或环境变量覆盖
 
 安全性与稳健性
@@ -74,13 +86,9 @@
 - Dry-run：实现一个无风险的 Dry-run 模式以便安全测试
 
 变更日志（示例）
-- 1.6：保留默认 /swapfile；加强路径校验、回滚、日志观测、测试策略
-- 1.x：历史变更见历史记录（见 AGENTS.md）
-
-贡献与参与
-- 贡献：欢迎 fork 本仓库并提交 PR，附带变更日志与测试计划
+- 1.7：保持默认路径、加强路径校验、回滚、日志观测、测试覆盖的改进（向后兼容）
+- 其他历史变更请参考 AGENTS.md
 
 目录结构
-- swap.sh：主脚本（当前版本 1.6）
-- AGENTS.md：开发者指南与工作流
+- swap.sh：主脚本（当前版本 1.7）
 - README.md：本文件
