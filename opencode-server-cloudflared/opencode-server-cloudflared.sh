@@ -34,6 +34,13 @@ log_error() {
 }
 
 print_help() {
+    # Resolve a stable script invocation path for display
+    local script_path
+    script_path=$(readlink -f "$0" 2>/dev/null)
+    if [ -z "$script_path" ]; then
+        script_path="$0"
+    fi
+
     echo "========================================"
     echo "    OpenCode + Cloudflared 安装脚本    "
     echo "           Version $SCRIPT_VERSION            "
@@ -55,11 +62,9 @@ print_help() {
     echo "  -t, --token <token>       Cloudflare Tunnel 密钥"
     echo ""
     echo "Examples:"
-    echo "  $0 install -t eyJh..."
-    echo "  $0 install -P YourPassword123 -t eyJh..."
-    echo "  $0 install -p 8080 -u admin -P YourPassword123 -t eyJh..."
-    echo "  $0 status"
-    echo "  $0 stop"
+    echo "  ${script_path} install -t eyJh..."
+    echo "  ${script_path} install -P YourPassword123 -t eyJh..."
+    echo "  ${script_path} install -p 8080 -u admin -P YourPassword123 -t eyJh..."
     echo ""
     echo "Repository: https://github.com/anomalyco/opencode"
     echo ""
@@ -287,6 +292,23 @@ start_services() {
     echo ""
 }
 
+interactive_deploy() {
+    echo "进入交互式部署模式："
+    read -p "OpenCode 端口 [56780]: " OPENCODE_PORT
+    OPENCODE_PORT=${OPENCODE_PORT:-56780}
+    read -p "登录用户名 [opencode]: " OPENCODE_USER
+    OPENCODE_USER=${OPENCODE_USER:-opencode}
+    read -s -p "登录密码（留空无密码）: " OPENCODE_PASSWORD
+    echo
+    read -s -p "Cloudflare Tunnel 密钥 (-t): " CLOUDFLARED_TOKEN
+    echo
+    if [ -z "$CLOUDFLARED_TOKEN" ]; then
+        log_error "必须指定 Cloudflare Tunnel 密钥 (-t)；退出"
+        exit 1
+    fi
+    start_services "$OPENCODE_PORT" "$OPENCODE_USER" "$OPENCODE_PASSWORD" "$CLOUDFLARED_TOKEN"
+}
+
 stop_services() {
     log_info "停止服务..."
 
@@ -456,6 +478,9 @@ main() {
             stop_services
             sleep 2
             start_services "$OPENCODE_PORT" "$OPENCODE_USER" "$OPENCODE_PASSWORD" "$CLOUDFLARED_TOKEN"
+            ;;
+        interactive)
+            interactive_deploy
             ;;
         *)
             log_error "未知命令: $COMMAND"
