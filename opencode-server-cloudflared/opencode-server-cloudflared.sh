@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 set -e
 
 OPENCODE_DIR="$HOME/.opencode"
@@ -72,14 +74,28 @@ check_root() {
 check_dependencies() {
     log_info "检查系统依赖..."
 
-    if ! command -v curl &> /dev/null; then
-        log_info "安装 curl..."
-        apt-get update -qq && apt-get install -y -qq curl > /dev/null 2>&1
+    # Detect package manager (apt/yum) for broad compatibility
+    if command -v apt-get >/dev/null 2>&1; then
+        PKG_INSTALL="apt-get install -y"
+        PKG_UPDATE="apt-get update -qq"
+    elif command -v yum >/dev/null 2>&1; then
+        PKG_INSTALL="yum install -y"
+        PKG_UPDATE="yum makecache -q"
+    else
+        log_error "无法检测到受支持的包管理器（apt-get / yum）。请在 Debian/Ubuntu/RHEL 及其派生发行版上运行。"
+        return 1
     fi
 
-    if ! command -v wget &> /dev/null; then
+    if ! command -v curl >/dev/null 2>&1; then
+        log_info "安装 curl..."
+        $PKG_UPDATE
+        $PKG_INSTALL curl
+    fi
+
+    if ! command -v wget >/dev/null 2>&1; then
         log_info "安装 wget..."
-        apt-get update -qq && apt-get install -y -qq wget > /dev/null 2>&1
+        $PKG_UPDATE
+        $PKG_INSTALL wget
     fi
 
     log_success "依赖检查完成"
@@ -153,6 +169,23 @@ start_services() {
     OPENCODE_USER="${2:-opencode}"
     OPENCODE_PASSWORD="$3"
     CLOUDFLARED_TOKEN="$4"
+
+    # 端口占用检测：若端口已被占用，直接退出安装流程并给出友好提示
+    port_in_use=0
+    if command -v ss >/dev/null 2>&1; then
+        if ss -ltnp 2>/dev/null | grep -qE ":${OPENCODE_PORT}[[:space:]]"; then
+            port_in_use=1
+        fi
+    fi
+    if [ "$port_in_use" -eq 0 ] && command -v netstat >/dev/null 2>&1; then
+        if netstat -tlnp 2>/dev/null | grep -E ":${OPENCODE_PORT}[[:space:]]"; then
+            port_in_use=1
+        fi
+    fi
+    if [ "$port_in_use" -eq 1 ]; then
+        log_error "端口 ${OPENCODE_PORT} 已被占用，请更换端口再试（使用 -p 指定端口）。"
+        exit 1
+    fi
 
     if [ -z "$CLOUDFLARED_TOKEN" ]; then
         log_error "必须指定 Cloudflare Tunnel 密钥 (-t 或 --token)"
