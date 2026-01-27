@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-VERSION="1.6"
+VERSION="1.7"
 DEFAULT_SWAP_PATH="/swapfile"
 # Swap管理脚本 ARM/LVM 系统修复版本（终极版 - 简化路径处理）
 
