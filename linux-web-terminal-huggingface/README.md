@@ -1,6 +1,6 @@
-# Debian Web Terminal
+# Ubuntu Web Terminal
 
-基于 Debian 的 Web 终端，使用 ttyd 提供 Web 访问。
+基于 Ubuntu 22.04 的 Web 终端，使用 ttyd 提供 Web 访问。
 
 ## 功能特性
 
