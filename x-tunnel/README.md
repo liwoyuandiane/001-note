@@ -82,15 +82,15 @@
    - 点击 `Create Token` → `Create Custom Token`
    - 配置以下权限:
      ```
-     Account:
-       - Cloudflare Tunnel: Edit
+     账户权限:
+       - 账户: Cloudflare Tunnel → 编辑
+       - 账户: DNS 设置 → 编辑
 
-     Zone:
-       - DNS: Edit
-       - Zone: Read
+     区域权限:
+       - 区域: 区域设置 → 读取
 
-     Zone Resources:
-       - Include → Specific zone → [选择你的域名]
+     账户资源:
+       - 包括 → 特定区域 → [选择你的域名]
      ```
    - 点击 `Continue to summary` → `Create Token`
    - 复制生成的 API Token
@@ -624,15 +624,15 @@ rm suoha-x.sh
 **A**: Cloudflare API Token 需要以下权限：
 
 ```
-Account:
-  - Cloudflare Tunnel: Edit
+账户权限:
+  - 账户: Cloudflare Tunnel → 编辑
+  - 账户: DNS 设置 → 编辑
 
-Zone:
-  - DNS: Edit
-  - Zone: Read
+区域权限:
+  - 区域: 区域设置 → 读取
 
-Zone Resources:
-  - Include → Specific zone → [选择你的域名]
+账户资源:
+  - 包括 → 特定区域 → [选择你的域名]
 ```
 
 在 Cloudflare Dashboard 的 API Tokens 页面创建 Custom Token 时配置这些权限。
