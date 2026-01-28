@@ -64,6 +64,70 @@ print_warning() {
     echo -e "\033[0;33m⚠ $1\033[0m"
 }
 
+# API 错误处理函数 - 分析错误并显示准确的权限提示
+analyze_api_error() {
+    local response="$1"
+    local api_name="$2"
+    local errors=$(echo "$response" | grep -o '"message":"[^"]*"' | head -n 1 | cut -d'"' -f4)
+    local error_code=$(echo "$response" | grep -o '"code":[0-9]*' | head -n 1 | cut -d':' -f2)
+    
+    # 判断错误类型并显示详细提示
+    if echo "$errors" | grep -qi "Authentication error"; then
+        echo ""
+        print_error "[$api_name] 认证失败: API Token 无效或权限不足"
+        echo ""
+        echo "┌─────────────────────────────────────────────────────────────────────────────┐"
+        echo "│                      请检查您的 Cloudflare API Token 权限                      │"
+        echo "├─────────────────────────────────────────────────────────────────────────────┤"
+        echo "│  请登录 Cloudflare 控制台 → 我的个人资料 → API 令牌 → 编辑令牌                   │"
+        echo "│                                                                             │"
+        echo "│  对于当前操作，您的 Token 需要以下权限:                                        │"
+        echo "│                                                                             │"
+        echo "│  1. 账户权限 (Account):                                                      │"
+        echo "│     • Cloudflare Tunnel: 编辑                                                │"
+        echo "│                                                                             │"
+        echo "│  2. 区域权限 (Zone) - 需要选择对应的 Zone:                                    │"
+        echo "│     • DNS: 编辑                                                              │"
+        echo "│     • Zone: 读取                                                             │"
+        echo "│                                                                             │"
+        echo "│  示例配置:                                                                   │"
+        echo "│  账户资源: 包含(Include) → 您的账户                                          │"
+        echo "│  区域资源: 包含(Include) → 特定区域 → 选择您的域名                            │"
+        echo "└─────────────────────────────────────────────────────────────────────────────┘"
+        echo ""
+        return 1
+    fi
+    
+    if echo "$errors" | grep -qi "not found"; then
+        echo ""
+        print_error "[$api_name] 资源未找到"
+        echo ""
+        print_info "可能原因:"
+        echo "  • Zone ID 不正确或您无权访问此 Zone"
+        echo "  • Account ID 不正确"
+        echo "  • 隧道不存在"
+        echo ""
+        return 1
+    fi
+    
+    if echo "$errors" | grep -qi "already exists"; then
+        echo ""
+        print_warning "[$api_name] 资源已存在"
+        return 1
+    fi
+    
+    # 通用错误
+    if [ -n "$errors" ]; then
+        echo ""
+        print_error "[$api_name] 错误: $errors"
+        if [ -n "$error_code" ]; then
+            print_info "错误代码: $error_code"
+        fi
+    fi
+    
+    return 1
+}
+
 # 解析 Cloudflare Tunnel Token
 # 返回 JSON 格式的 account_id 和 tunnel_id
 decode_tunnel_token() {
@@ -153,22 +217,27 @@ get_account_id() {
     # 检查 API 响应
     local success=$(echo "$response" | grep -o '"success":[^,}]*' | cut -d':' -f2 | tr -d ' ')
     if [ "$success" != "true" ]; then
-        print_error "无法获取 Account ID，请检查 API Token 是否正确"
-        local errors=$(echo "$response" | grep -o '"message":"[^"]*"' | head -n 1 | cut -d'"' -f4)
-        if [ -n "$errors" ]; then
-            print_error "错误信息: $errors"
-        fi
+        analyze_api_error "$response" "获取 Account ID"
         return 1
     fi
 
     # 提取第一个 account id (从result数组中提取)
-    local account_id=$(echo "$response" | grep -o '"result":\[[^]]*\]' | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
+    local account_id=$(echo "$response" | grep -o '"result":\[[^\]]*\]' | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
 
     if [ -n "$account_id" ]; then
         echo "$account_id"
         return 0
     else
+        echo ""
         print_error "未找到 Account ID"
+        echo ""
+        print_info "可能原因:"
+        echo "  • API Token 没有访问任何账户的权限"
+        echo "  • 该账户尚未激活 Cloudflare 服务"
+        echo ""
+        print_info "请确保您的 API Token 具有以下权限:"
+        echo "  • 账户: Cloudflare Tunnel → 编辑"
+        echo ""
         return 1
     fi
 }
@@ -227,11 +296,7 @@ create_cloudflare_tunnel() {
     # 检查 API 响应
     local success=$(echo "$response" | grep -o '"success":[^,}]*' | cut -d':' -f2 | tr -d ' ')
     if [ "$success" != "true" ]; then
-        print_error "隧道创建失败"
-        local errors=$(echo "$response" | grep -o '"message":"[^"]*"' | head -n 1 | cut -d'"' -f4)
-        if [ -n "$errors" ]; then
-            print_error "错误信息: $errors"
-        fi
+        analyze_api_error "$response" "创建 Cloudflare Tunnel"
         return 1
     fi
 
@@ -271,7 +336,7 @@ check_tunnel_exists() {
     fi
 
     # 提取 tunnel_id (从result数组中提取)
-    local tunnel_id=$(echo "$response" | grep -o '"result":\[[^]]*\]' | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
+    local tunnel_id=$(echo "$response" | grep -o '"result":\[[^\]]*\]' | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
 
     if [ -n "$tunnel_id" ] && [ "$tunnel_id" != "null" ]; then
         echo "$tunnel_id"
@@ -339,11 +404,7 @@ update_tunnel_config() {
     # 检查 API 响应
     local success=$(echo "$response" | grep -o '"success":[^,}]*' | cut -d':' -f2 | tr -d ' ')
     if [ "$success" != "true" ]; then
-        print_error "隧道配置失败"
-        local errors=$(echo "$response" | grep -o '"message":"[^"]*"' | head -n 1 | cut -d'"' -f4)
-        if [ -n "$errors" ]; then
-            print_error "错误信息: $errors"
-        fi
+        analyze_api_error "$response" "更新隧道配置"
         return 1
     fi
 
@@ -368,7 +429,7 @@ check_dns_record() {
     fi
 
     # 提取 record_id (从result数组中提取第一个记录)
-    local record_id=$(echo "$response" | grep -o '"result":\[[^]]*\]' | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
+    local record_id=$(echo "$response" | grep -o '"result":\[[^\]]*\]' | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
 
     if [ -n "$record_id" ] && [ "$record_id" != "null" ]; then
         echo "$record_id"
@@ -402,11 +463,7 @@ create_dns_record() {
     # 检查 API 响应
     local success=$(echo "$response" | grep -o '"success":[^,}]*' | cut -d':' -f2 | tr -d ' ')
     if [ "$success" != "true" ]; then
-        print_error "DNS 记录创建失败"
-        local errors=$(echo "$response" | grep -o '"message":"[^"]*"' | head -n 1 | cut -d'"' -f4)
-        if [ -n "$errors" ]; then
-            print_error "错误信息: $errors"
-        fi
+        analyze_api_error "$response" "创建 DNS 记录"
         return 1
     fi
 
