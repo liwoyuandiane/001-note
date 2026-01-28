@@ -95,10 +95,10 @@ get_free_port() {
 # 停止服务
 stop_services() {
     echo "🛑 停止所有服务..."
-    screen -wipe &> /dev/null
+    screen -wipe &> /dev/null || true
     for srv in x-tunnel opera argo; do
-        if screen -list | grep -q "$srv"; then
-            screen -S "$srv" -X quit &> /dev/null
+        if screen -list 2>/dev/null | grep -q "$srv"; then
+            screen -S "$srv" -X quit &> /dev/null || true
             sleep 1
         fi
     done
@@ -201,7 +201,7 @@ EOF
 check_status() {
     echo -e "\n📊 服务状态："
     for srv in x-tunnel opera argo; do
-        screen -list | grep -q "$srv" && echo "✅ $srv：运行中" || echo "❌ $srv：已停止"
+        screen -list 2>/dev/null | grep -q "$srv" && echo "✅ $srv：运行中" || echo "❌ $srv：已停止"
     done
 }
 
