@@ -227,6 +227,67 @@ $ ./suoha-x.sh
 5. **清理资源**: 卸载时需要提供 API Token 和 Zone ID
 6. **重复创建**: 再次运行会创建新隧道，旧隧道需要手动清理
 
+## 安装步骤
+
+### 方法一：使用 .env 配置文件（推荐）
+
+1. **下载脚本**
+
+将 `suoha-x.sh` 下载到服务器：
+
+```bash
+# 使用 wget
+wget https://raw.githubusercontent.com/your-repo/suoha-x.sh/suoha-x.sh
+
+# 或使用 curl
+curl -O https://raw.githubusercontent.com/your-repo/suoha-x.sh/suoha-x.sh
+```
+
+2. **赋予执行权限**
+
+```bash
+chmod +x suoha-x.sh
+```
+
+3. **配置环境变量**
+
+复制示例配置文件并根据需要修改：
+
+```bash
+# 复制示例配置文件
+cp .env.example .env
+
+# 编辑配置文件
+nano .env
+# 或使用 vim
+vim .env
+```
+
+4. **使用 .env 文件启动**
+
+```bash
+# 从 .env 文件加载配置并启动
+./suoha-x.sh install -e
+```
+
+### 方法二：交互式模式
+
+直接运行脚本，通过菜单选择操作：
+
+```bash
+./suoha-x.sh
+```
+
+按照提示选择相应的操作模式。
+
+### 方法三：命令行参数模式
+
+通过命令行参数直接执行操作，适合自动化脚本和批量部署。
+
+```bash
+./suoha-x.sh install [options]
+```
+
 ## 使用方法
 
 ### 模式一：交互式模式
@@ -298,6 +359,195 @@ $ ./suoha-x.sh
 | `-c` | `4` 或 `6` | Cloudflare 连接模式 (IPv4/IPv6) | `4` |
 | `-x` | `<token>` | x-tunnel 身份令牌 | 无 |
 | `-g` | `AM`/`AS`/`EU` | Opera 国家代码 | `AM` |
+| `-t` | `<token>` | Cloudflare 固定隧道令牌 | 无 |
+| `-p` | `<port>` | x-tunnel 监听端口 | `56789` |
+| `-a` | `<token>` | Cloudflare API Token | 无 |
+| `-z` | `<id>` | Cloudflare Zone ID | 无 |
+| `-d` | `<domain>` | 隧道域名 | 无 |
+| `-n` | `<name>` | 隧道名称 | `x-tunnel-auto` |
+| `-e` | 无 | 从 .env 文件加载环境变量 | 无 |
+
+### 模式三：使用 .env 文件（推荐）
+
+使用环境变量文件进行配置，适合复杂配置和 CI/CD 场景。
+
+#### 创建 .env 文件
+
+1. **复制示例配置文件**
+
+```bash
+cp .env.example .env
+```
+
+2. **编辑配置文件**
+
+```bash
+nano .env
+```
+
+3. **填写必要的配置**
+
+根据使用模式填写对应的配置项：
+
+**Quick Tunnel 模式：**
+```bash
+# 基础配置
+token="my-token"
+```
+
+**API 自动创建模式：**
+```bash
+# Cloudflare API 配置
+cf_api_token="YOUR_API_TOKEN"
+cf_zone_id="YOUR_ZONE_ID"
+
+# 隧道域名配置
+cf_domain="tunnel.example.com"
+cf_tunnel_name="my-tunnel"
+
+# 可选配置
+opera="1"
+country="AM"
+token="my-secret-token"
+port="56789"
+ips="4"
+```
+
+**固定隧道模式：**
+```bash
+# 固定隧道配置
+tunnel_token="YOUR_TUNNEL_TOKEN"
+
+# 可选配置
+opera="0"
+ips="4"
+token="my-token"
+port="56789"
+```
+
+#### 使用 .env 文件启动
+
+```bash
+# 从 .env 文件加载配置并启动
+./suoha-x.sh install -e
+```
+
+#### .env 文件参数详解
+
+##### Cloudflare API 配置（API 自动创建模式必需）
+
+**cf_api_token**
+- **说明**: Cloudflare API 访问令牌，用于创建和管理隧道
+- **获取方式**: Cloudflare Dashboard → My Profile → API Tokens → Create Token
+- **所需权限**:
+  - 账户: Cloudflare Tunnel → 编辑
+  - 账户: DNS 设置 → 编辑
+  - 区域: 区域设置 → 读取
+  - 账户资源: 包括 → 特定区域 → [选择你的域名]
+- **示例**: `"123456789abcdef123456789abcdef12345678"`
+- **注意**: API Token 包含敏感信息，请妥善保管，不要提交到版本控制系统
+
+**cf_zone_id**
+- **说明**: Cloudflare 区域 ID，标识你的域名所在的区域
+- **获取方式**: Cloudflare Dashboard → 选择你的域名 → 右侧边栏找到 Zone ID
+- **示例**: `"a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"`
+- **注意**: 每个 Zone ID 对应一个域名，确保选择正确的域名
+
+##### 隧道域名配置（API 自动创建模式必需）
+
+**cf_domain**
+- **说明**: 要绑定的完整域名（子域名或主域名）
+- **要求**: 域名必须在 Cloudflare 上托管
+- **示例**: `"tunnel.example.com"` 或 `"sub.mydomain.com"`
+- **注意**: 域名不能已经被其他服务使用
+
+**cf_tunnel_name**
+- **说明**: Cloudflare Tunnel 的显示名称
+- **默认值**: `"x-tunnel-auto"`
+- **限制**: 只能包含字母、数字、连字符（-），不能以连字符开头或结尾
+- **示例**: `"my-production-tunnel"`
+- **可选**: 不设置时使用默认值
+
+##### x-tunnel 配置
+
+**token**
+- **说明**: x-tunnel 身份令牌，用于访问控制
+- **作用**: 设置后访问时需要提供此令牌
+- **默认值**: 空（无需认证）
+- **示例**: `"my-secret-token-123"`
+- **建议**: 生产环境建议设置 Token 以增强安全性
+- **可选**: 不设置时无需认证即可访问
+
+**port**
+- **说明**: x-tunnel 服务监听的本地端口
+- **默认值**: `"56789"`
+- **范围**: 1024-65535
+- **示例**: `"56789"` 或 `"8080"`
+- **注意**: 确保端口未被其他服务占用
+- **可选**: 不设置时使用默认值
+
+##### Opera 代理配置
+
+**opera**
+- **说明**: 是否启用 Opera 前置代理
+- **作用**: 启用后会通过 Opera 代理转发流量，提供额外的匿名性
+- **默认值**: `"0"`
+- **可选值**: `"0"`（不启用）或 `"1"`（启用）
+- **示例**: `"1"`
+- **流量路径**: 启用时：`Opera 代理 → x-tunnel → Cloudflare Argo Tunnel`
+- **可选**: 不设置时默认不启用
+
+**country**
+- **说明**: 选择 Opera 代理服务器的地区
+- **默认值**: `"AM"`（北美地区）
+- **可选值**:
+  - `"AM"` - 北美地区（Americas）
+  - `"AS"` - 亚太地区（Asia）
+  - `"EU"` - 欧洲地区（Europe）
+- **示例**: `"AS"`
+- **注意**: 只有启用 Opera 代理（`opera="1"`）时此参数才生效
+- **可选**: 不设置时使用默认值
+
+##### Cloudflare 连接配置
+
+**ips**
+- **说明**: 选择 cloudflared 连接使用的 IP 版本
+- **默认值**: `"4"`（IPv4）
+- **可选值**: `"4"`（IPv4）或 `"6"`（IPv6）
+- **示例**: `"6"`
+- **注意**: 确保服务器支持对应的 IP 版本
+- **可选**: 不设置时使用默认值
+
+##### Cloudflare 固定隧道配置（固定隧道模式）
+
+**tunnel_token**
+- **说明**: 使用预先在 Cloudflare 后台创建的固定隧道的令牌
+- **获取方式**: Cloudflare Dashboard → Zero Trust → Networks → Tunnels → 创建隧道 → 获取 Token
+- **示例**: `"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
+- **注意**: 如果使用此模式，不需要设置 `cf_api_token`、`cf_zone_id`、`cf_domain`
+- **可选**: 不设置时使用 Quick Tunnel 或 API 自动创建模式
+
+#### .env 文件注意事项
+
+1. **格式要求**:
+   - 所有值都应使用双引号包裹
+   - 行首的 `#` 表示注释，可以删除或保留
+   - 空行会被忽略
+   - 只有必要的变量需要填写，其他可以使用默认值
+
+2. **安全性**:
+   - `.env` 文件包含敏感信息，不要提交到 Git 等版本控制系统
+   - 在 `.gitignore` 中添加 `.env` 文件
+   - 定期更换 API Token 和其他密钥
+
+3. **配置优先级**:
+   - 命令行参数优先于 `.env` 文件
+   - 可以同时使用两者，命令行参数会覆盖 `.env` 中的配置
+
+4. **验证配置**:
+   - 在运行脚本前，检查 `.env` 文件格式是否正确
+   - 确保所有必需的参数都已填写
+   - 测试 API Token 权限是否正确
 
 ## 参数详细说明
 
@@ -371,6 +621,16 @@ $ ./suoha-x.sh
 - 使用 IPv4 连接
 - 使用亚太地区的 Opera 代理
 - 设置身份令牌为 "mytoken"
+
+#### 6. 使用 .env 文件配置
+
+```bash
+# 先配置 .env 文件
+nano .env
+
+# 填写配置后启动
+./suoha-x.sh install -e
+```
 
 ### API 自动创建模式
 
@@ -687,6 +947,181 @@ rm suoha-x.sh
 ./suoha-x.sh install -a "API_TOKEN" -z "ZONE_ID" -d "new.example.com"
 ```
 
+### Q17: 如何使用 .env 文件配置？
+
+**A**: 按照以下步骤使用 .env 文件：
+
+1. **复制示例配置文件**：
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **编辑配置文件**：
+   ```bash
+   nano .env
+   ```
+
+3. **填写必要的配置**（根据使用模式填写对应的配置项）
+
+4. **使用 .env 文件启动**：
+   ```bash
+   ./suoha-x.sh install -e
+   ```
+
+5. **如果 .env 文件不存在会怎样？**
+   - 脚本会显示错误信息："未找到 .env 文件"
+   - 脚本会退出，不会继续执行
+
+### Q18: .env 文件和命令行参数可以同时使用吗？
+
+**A**: 可以。配置优先级如下：
+
+1. **命令行参数优先级最高**
+2. 如果同时使用 `.env` 文件和命令行参数，命令行参数会覆盖 `.env` 中的配置
+3. 示例：
+   ```bash
+   # .env 文件中设置了 token="token1"
+   # 命令行参数 -x token2
+   # 最终使用的 token 是 "token2"
+   ./suoha-x.sh install -e -x token2
+   ```
+
+### Q19: .env 文件应该包含哪些内容？
+
+**A**: 根据使用的模式，.env 文件应包含：
+
+**Quick Tunnel 模式**：
+```bash
+token="your-token"
+```
+
+**API 自动创建模式**：
+```bash
+cf_api_token="YOUR_API_TOKEN"
+cf_zone_id="YOUR_ZONE_ID"
+cf_domain="tunnel.example.com"
+cf_tunnel_name="my-tunnel"
+# 其他可选配置
+opera="1"
+country="AM"
+port="56789"
+ips="4"
+```
+
+**固定隧道模式**：
+```bash
+tunnel_token="YOUR_TUNNEL_TOKEN"
+# 其他可选配置
+opera="0"
+ips="4"
+```
+
+### Q20: .env 文件中的密码如何保护？
+
+**A**: 保护 .env 文件安全：
+
+1. **设置正确的文件权限**：
+   ```bash
+   chmod 600 .env
+   ```
+
+2. **不要提交到版本控制系统**：
+   在 `.gitignore` 中添加：
+   ```
+   .env
+   ```
+
+3. **定期更换敏感信息**：
+   定期更新 API Token 和其他密钥
+
+4. **使用密钥管理服务**（推荐）：
+   对于生产环境，建议使用专业的密钥管理服务
+
+### Q21: .env 文件格式错误怎么办？
+
+**A**: 检查以下几点：
+
+1. **所有值都应使用双引号包裹**：
+   ```bash
+   # 正确
+   token="my-token"
+   # 错误
+   token=my-token
+   ```
+
+2. **行首的 # 表示注释**：
+   ```bash
+   # 这是一个注释
+   token="my-token"
+   ```
+
+3. **空行会被忽略**：
+   ```bash
+   token="my-token"
+
+   opera="1"
+   ```
+
+4. **确保没有多余的空格或特殊字符**：
+   ```bash
+   # 正确
+   cf_domain="tunnel.example.com"
+   # 错误
+   cf_domain = "tunnel.example.com"  # 等号两边不能有空格
+   ```
+
+### Q22: 如何在不同环境中使用不同的 .env 配置？
+
+**A**: 使用不同的 .env 文件：
+
+```bash
+# 开发环境
+cp .env.example .env.development
+nano .env.development
+./suoha-x.sh install -e
+
+# 生产环境
+cp .env.example .env.production
+nano .env.production
+# 使用符号链接
+ln -sf .env.production .env
+./suoha-x.sh install -e
+```
+
+或者使用环境变量覆盖：
+```bash
+# 使用开发环境配置
+export ENVIRONMENT="development"
+./suoha-x.sh install -e
+
+# 使用生产环境配置
+export ENVIRONMENT="production"
+./suoha-x.sh install -e
+```
+
+### Q23: .env.example 文件是什么？
+
+**A**: `.env.example` 文件是配置模板文件，包含：
+
+1. **所有可用的配置项**
+2. **每个配置项的说明**
+3. **默认值**
+4. **使用示例**
+
+作用：
+- 帮助新用户快速了解配置选项
+- 提供配置格式参考
+- 可以复制为实际的 `.env` 文件使用
+
+使用方法：
+```bash
+# 复制示例文件为实际配置文件
+cp .env.example .env
+
+# 编辑配置
+nano .env
+```
+
 ## 技术架构
 
 ### 服务组件
@@ -715,13 +1150,213 @@ rm suoha-x.sh
 
 ## 许可证
 
-本项目仅供学习和研究使用。
+本项目采用 MIT 许可证。
 
-## 贡献
+```
+MIT License
 
-欢迎提交 Issue 和 Pull Request！
+Copyright (c) 2025 suoha x-tunnel
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## 贡献指南
+
+欢迎为 suoha x-tunnel 项目做出贡献！
+
+### 如何贡献
+
+1. **Fork 本仓库**
+   - 点击 GitHub 页面右上角的 Fork 按钮
+
+2. **克隆你的 Fork**
+   ```bash
+   git clone https://github.com/your-username/x-tunnel.git
+   cd x-tunnel
+   ```
+
+3. **创建新分支**
+   ```bash
+   git checkout -b feature/your-feature-name
+   # 或
+   git checkout -b fix/your-bug-fix
+   ```
+
+4. **进行更改**
+   - 编写代码
+   - 添加必要的注释
+   - 确保代码符合项目的编码规范
+   - 更新相关文档
+
+5. **提交更改**
+   ```bash
+   git add .
+   git commit -m "feat: 添加新功能描述"
+   # 或
+   git commit -m "fix: 修复问题描述"
+   ```
+
+6. **推送到你的 Fork**
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+
+7. **创建 Pull Request**
+   - 访问原仓库
+   - 点击 "New Pull Request"
+   - 选择你的分支
+   - 填写 Pull Request 描述
+   - 提交等待审核
+
+### 提交规范
+
+使用语义化提交信息（Semantic Commit Messages）：
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+**类型（type）**：
+- `feat`: 新功能
+- `fix`: 修复 bug
+- `docs`: 文档更新
+- `style`: 代码格式调整（不影响功能）
+- `refactor`: 重构
+- `test`: 测试相关
+- `chore`: 构建/工具链相关
+
+**示例**：
+```
+feat(env): 添加 .env 文件支持
+
+- 添加 load_env_file() 函数
+- 新增 -e 命令行选项
+- 更新文档
+
+Closes #123
+```
+
+### 编码规范
+
+1. **Shell 脚本规范**：
+   - 使用 4 空格缩进
+   - 函数名使用小写字母和下划线：`function_name`
+   - 变量名使用小写字母和下划线：`variable_name`
+   - 常量名使用大写字母和下划线：`CONSTANT_NAME`
+   - 添加适当的注释说明复杂逻辑
+
+2. **代码风格**：
+   - 保持代码简洁明了
+   - 避免过长的函数，合理拆分
+   - 使用有意义的变量名和函数名
+   - 添加错误处理和日志输出
+
+3. **文档规范**：
+   - 更新 README.md
+   - 添加必要的注释
+   - 编写清晰的提交信息
+   - 更新更新日志
+
+### 报告问题
+
+如果你发现了 bug 或有功能建议，请：
+
+1. 搜索现有的 Issues，确认问题未被报告
+2. 创建新的 Issue
+3. 提供详细的信息：
+   - 问题描述
+   - 复现步骤
+   - 预期行为
+   - 实际行为
+   - 环境信息（操作系统、shell 版本等）
+   - 错误日志
+
+### 功能建议
+
+如果你有新的功能想法，请：
+
+1. 在 Issues 中描述你的想法
+2. 说明功能的用途和好处
+3. 讨论实现方案
+4. 等待社区反馈
+
+### 开发环境设置
+
+1. **克隆仓库**
+   ```bash
+   git clone https://github.com/your-username/x-tunnel.git
+   cd x-tunnel
+   ```
+
+2. **测试脚本**
+   ```bash
+   # 语法检查
+   bash -n suoha-x.sh
+
+   # 测试功能
+   ./suoha-x.sh install --help
+   ```
+
+3. **运行测试**（如果有）
+   ```bash
+   # 运行测试套件
+   ./tests/run_tests.sh
+   ```
+
+### 代码审查
+
+所有 Pull Request 都需要经过代码审查：
+
+1. 至少一位维护者审核
+2. 通过所有测试
+3. 代码符合项目规范
+4. 文档已更新
+5. 更新日志已更新
+
+### 行为准则
+
+- 尊重所有贡献者
+- 接受建设性反馈
+- 专注于项目改进
+- 避免争议性讨论
+- 保持专业和友好
+
+感谢你的贡献！
 
 ## 更新日志
+
+### v3.2.0
+
+- 新增 .env 文件支持，支持从环境变量文件加载配置
+- 添加 load_env_file() 函数，实现环境变量加载功能
+- 新增 -e 命令行选项，支持从 .env 文件加载环境变量
+- 创建 .env.example 示例配置文件，包含详细的配置说明
+- 优化代码结构，增强可维护性和可读性
+- 完善错误处理机制，提供更友好的错误提示
+- 更新 README 文档，添加详细的 .env 配置说明和使用示例
+- 新增常见问题解答（FAQ），涵盖 .env 相关问题
+- 改进配置灵活性，支持命令行参数和 .env 文件同时使用
+- 增强安全性提示，建议保护 .env 文件中的敏感信息
 
 ### v3.1.0
 

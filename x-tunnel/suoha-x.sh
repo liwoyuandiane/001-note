@@ -178,18 +178,50 @@ create_cloudflare_tunnel() {
     local api_token=$1
     local account_id=$2
     local tunnel_name=$3
+    local reuse_mode=${4:-false}  # 是否尝试复用已存在的隧道
 
+    print_info "正在检查隧道: $tunnel_name..."
+
+    # 检查隧道是否已存在
+    local existing_tunnel_id=$(check_tunnel_exists "$api_token" "$account_id" "$tunnel_name")
+
+    if [ -n "$existing_tunnel_id" ]; then
+        print_warning "隧道 '$tunnel_name' 已存在 (ID: $existing_tunnel_id)"
+
+        if [ "$reuse_mode" = "true" ]; then
+            # 尝试复用隧道
+            print_info "尝试复用现有隧道..."
+            local tunnel_token=$(get_tunnel_token "$api_token" "$account_id" "$existing_tunnel_id")
+
+            if [ -n "$tunnel_token" ]; then
+                print_success "成功复用现有隧道"
+                local credentials_file="/tmp/tunnel-$existing_tunnel_id.json"
+                echo "$existing_tunnel_id|$tunnel_token|$credentials_file"
+                return 0
+            else
+                print_warning "无法获取隧道 token，将删除旧隧道并创建新隧道"
+                delete_cloudflare_tunnel "$api_token" "$account_id" "$existing_tunnel_id"
+                sleep 1
+            fi
+        else
+            # 自动删除旧隧道并创建新的
+            print_info "正在删除旧隧道..."
+            delete_cloudflare_tunnel "$api_token" "$account_id" "$existing_tunnel_id"
+            sleep 1
+            print_success "旧隧道已删除，正在创建新隧道..."
+        fi
+    fi
+
+    # 创建新隧道
     print_info "正在创建隧道: $tunnel_name..."
 
     local api_url="https://api.cloudflare.com/client/v4/accounts/$account_id/tunnels"
-    local tunnel_secret=$(openssl rand -base64 32 2>/dev/null || echo "tunnel_secret_placeholder")
 
     local response=$(curl -s --max-time 30 -X POST "$api_url" \
         -H "Authorization: Bearer $api_token" \
         -H "Content-Type: application/json" \
         -d '{
-            "name": "'"$tunnel_name"'",
-            "tunnel_secret": "'"$tunnel_secret"'"
+            "name": "'"$tunnel_name"'"
         }' 2>/dev/null)
 
     # 检查 API 响应
@@ -204,7 +236,7 @@ create_cloudflare_tunnel() {
     fi
 
     # 提取 tunnel_id 和 credentials (从result字段中提取)
-    local result=$(echo "$response" | grep -o '"result":{[^}]*}' | sed 's/"result"://')
+    local result=$(echo "$response" | jq -r '.result' 2>/dev/null || echo "$response" | grep -o '"result":{[^}]*}' | sed 's/"result"://')
     local tunnel_id=$(echo "$result" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
     local tunnel_token=$(echo "$result" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
 
@@ -215,10 +247,59 @@ create_cloudflare_tunnel() {
 
     # 保存 credentials 到文件
     local credentials_file="/tmp/tunnel-$tunnel_id.json"
-    echo "$response" | jq -r '.result' > "$credentials_file" 2>/dev/null || echo "$response" > "$credentials_file"
+    echo "$result" > "$credentials_file"
 
     echo "$tunnel_id|$tunnel_token|$credentials_file"
     return 0
+}
+
+# 检查隧道是否存在
+check_tunnel_exists() {
+    local api_token=$1
+    local account_id=$2
+    local tunnel_name=$3
+
+    local api_url="https://api.cloudflare.com/client/v4/accounts/$account_id/tunnels?name=$tunnel_name"
+    local response=$(curl -s --max-time 30 -X GET "$api_url" \
+        -H "Authorization: Bearer $api_token" \
+        -H "Content-Type: application/json" 2>/dev/null)
+
+    # 检查 API 响应
+    local success=$(echo "$response" | grep -o '"success":[^,}]*' | cut -d':' -f2 | tr -d ' ')
+    if [ "$success" != "true" ]; then
+        return 1
+    fi
+
+    # 提取 tunnel_id (从result数组中提取)
+    local tunnel_id=$(echo "$response" | grep -o '"result":\[[^]]*\]' | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
+
+    if [ -n "$tunnel_id" ] && [ "$tunnel_id" != "null" ]; then
+        echo "$tunnel_id"
+        return 0
+    fi
+
+    return 1
+}
+
+# 获取已有隧道的 token
+get_tunnel_token() {
+    local api_token=$1
+    local account_id=$2
+    local tunnel_id=$3
+
+    local api_url="https://api.cloudflare.com/client/v4/accounts/$account_id/tunnels/$tunnel_id/token"
+    local response=$(curl -s --max-time 30 -X POST "$api_url" \
+        -H "Authorization: Bearer $api_token" \
+        -H "Content-Type: application/json" 2>/dev/null)
+
+    # 检查 API 响应
+    local token=$(echo "$response" | jq -r '.token' 2>/dev/null)
+    if [ -n "$token" ] && [ "$token" != "null" ]; then
+        echo "$token"
+        return 0
+    fi
+
+    return 1
 }
 
 # 更新隧道配置 (配置 ingress 规则)
@@ -426,6 +507,35 @@ load_tunnel_info() {
     fi
 }
 
+# 加载 .env 文件
+load_env_file() {
+    local env_file=".env"
+
+    # 检查 .env 文件是否存在
+    if [ ! -f "$env_file" ]; then
+        print_error "未找到 .env 文件"
+        return 1
+    fi
+
+    # 检查 .env 文件是否可读
+    if [ ! -r "$env_file" ]; then
+        print_error ".env 文件不可读"
+        return 1
+    fi
+
+    # 加载环境变量
+    print_info "正在加载环境变量: $env_file"
+    source "$env_file"
+
+    if [ $? -eq 0 ]; then
+        print_success "环境变量加载成功"
+        return 0
+    else
+        print_error "环境变量加载失败"
+        return 1
+    fi
+}
+
 # 显示帮助信息
 show_help() {
     cat << EOF
@@ -452,6 +562,7 @@ install 命令选项:
     -z <id>    Cloudflare Zone ID (可选，用于 API 自动创建或查询固定隧道域名)
     -d <domain> 隧道域名 (必需，用于 API 自动创建模式)
     -n <name>  隧道名称 (可选，用于 API 自动创建模式，默认: x-tunnel-auto)
+    -e        从 .env 文件加载环境变量 (可选，需在项目根目录下创建 .env 文件)
 
 remove 命令选项:
     -a <token> Cloudflare API 令牌 (可选，用于清理 API 创建的隧道)
@@ -488,6 +599,20 @@ remove 命令选项:
     # API 自动创建模式
     $(basename $0) install -a "YOUR_API_TOKEN" -z "YOUR_ZONE_ID" -d "tunnel.example.com" -o 0 -c 4 -x mytoken
     $(basename $0) install -a "API_TOKEN" -z "ZONE_ID" -d "tunnel.example.com" -n "my-tunnel" -o 1 -g AM -c 4
+
+    # 使用 .env 文件加载环境变量
+    $(basename $0) install -e
+
+    # .env 文件示例内容:
+    # cf_api_token="YOUR_API_TOKEN"
+    # cf_zone_id="YOUR_ZONE_ID"
+    # cf_domain="tunnel.example.com"
+    # cf_tunnel_name="my-tunnel"
+    # opera="0"
+    # ips="4"
+    # token="your_xtunnel_token"
+    # country="AM"
+    # port="56789"
 
     # 服务管理
     $(basename $0) stop
@@ -769,11 +894,11 @@ quicktunnel() {
         fi
         print_success "Account ID: $ACCOUNT_ID"
 
-        # 2. 创建隧道
-        print_info "正在创建隧道: $cf_tunnel_name"
-        TUNNEL_INFO=$(create_cloudflare_tunnel "$cf_api_token" "$ACCOUNT_ID" "$cf_tunnel_name")
+        # 2. 创建或复用隧道
+        print_info "正在准备隧道: $cf_tunnel_name"
+        TUNNEL_INFO=$(create_cloudflare_tunnel "$cf_api_token" "$ACCOUNT_ID" "$cf_tunnel_name" "true")
         if [ $? -ne 0 ]; then
-            print_error "隧道创建失败"
+            print_error "隧道操作失败"
             exit 1
         fi
 
@@ -782,10 +907,10 @@ quicktunnel() {
         CREDENTIALS_FILE=$(echo "$TUNNEL_INFO" | cut -d'|' -f3)
 
         if [ -z "$TUNNEL_ID" ] || [ -z "$TUNNEL_TOKEN" ]; then
-            print_error "隧道创建失败，无法提取 tunnel_id 或 tunnel_token"
+            print_error "隧道操作失败，无法提取 tunnel_id 或 tunnel_token"
             exit 1
         fi
-        print_success "隧道创建成功: $TUNNEL_ID"
+        print_success "隧道准备成功: $TUNNEL_ID"
 
         # 3. 更新隧道配置
         print_info "正在配置隧道 ingress..."
@@ -1363,7 +1488,7 @@ parse_arguments() {
     
     case $command in
         install)
-            while getopts "o:c:x:g:t:p:a:z:d:n:h" opt; do
+            while getopts "o:c:x:g:t:p:a:z:d:n:eh" opt; do
                 case $opt in
                     o)
                         opera=$OPTARG
@@ -1395,6 +1520,12 @@ parse_arguments() {
                     n)
                         cf_tunnel_name=$OPTARG
                         ;;
+                    e)
+                        load_env_file
+                        if [ $? -ne 0 ]; then
+                            exit 1
+                        fi
+                        ;;
                     h)
                         show_help
                         exit 0
@@ -1411,7 +1542,7 @@ parse_arguments() {
                         ;;
                 esac
             done
-            
+
             install_service
             ;;
         stop)
