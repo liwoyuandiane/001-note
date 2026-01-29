@@ -30,51 +30,14 @@ chmod +x suoha-x.sh
 
 ### 2. 创建并配置 .env 文件
 
-参考以下模板创建 `.env` 文件：
+下载模板文件并重命名为 `.env`，然后编辑：
 
 ```bash
-cat > .env << 'EOF'
-########################
-# Cloudflare 认证（二选一）
-########################
-
-# 推荐：API Token（更安全）
-cf_api_token="YOUR_CLOUDFLARE_API_TOKEN"
-
-# 备选：Global API Key（不推荐）
-# cf_email="you@example.com"
-# cf_global_key="YOUR_CLOUDFLARE_GLOBAL_API_KEY"
-
-########################
-# 隧道与域名配置（必填）
-########################
-
-# 要绑定的完整域名
-cf_domain="x-tunnel-1.example.com"
-
-# 域名所在的 Zone
-cf_zone="example.com"
-
-# Tunnel 名称
-cf_tunnel_name="x-tunnel-1"
-
-########################
-# 可选配置
-########################
-
-# x-tunnel 监听端口（留空则自动分配）
-# port="30000"
-
-# cloudflared IP 版本（4 或 6，默认 4）
-ips="4"
-EOF
-```
-
-然后编辑 `.env` 文件，填入你的真实配置：
-
-```bash
+curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/x-tunnel/.env.example -o .env
 nano .env
 ```
+
+填入你的 Cloudflare 认证信息和域名配置即可。
 
 ### 3. 启动服务
 
