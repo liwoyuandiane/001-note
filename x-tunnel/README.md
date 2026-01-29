@@ -23,8 +23,8 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/yourusername/x-tunnel.git
-cd x-tunnel
+git clone https://github.com/liwoyuandiane/001-note.git
+cd 001-note/x-tunnel
 ```
 
 ### 2. 配置环境变量
