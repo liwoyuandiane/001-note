@@ -504,6 +504,8 @@ api_mode() {
   download_binaries
   init_logging
 
+  ips="${ips:-4}"
+
   [ -n "${cf_domain:-}" ] || { print_error "缺少 cf_domain"; exit 1; }
   if [ -z "${cf_api_token:-}" ] && { [ -z "${cf_email:-}" ] || [ -z "${cf_global_key:-}" ]; }; then
     print_error "缺少 Cloudflare 认证信息"; exit 1
