@@ -1,0 +1,17 @@
+# 敏感配置文件
+.env
+.tunnel_info
+
+# 日志文件
+*.log
+*.log.*
+*.pid
+
+# 下载的二进制文件
+x-tunnel-linux
+cloudflared-linux
+opera-linux
+
+# 系统文件
+.DS_Store
+Thumbs.db
