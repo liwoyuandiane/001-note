@@ -604,7 +604,7 @@ remove_all() {
 show_help() {
 cat <<'HLP'
 用法:
-  ./suoha-x.sh install -m api -e -z your-domain.example.com
+  ./suoha-x.sh install -m api -e
   ./suoha-x.sh stop
   ./suoha-x.sh remove
   ./suoha-x.sh status
