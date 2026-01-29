@@ -4,7 +4,8 @@
 
 ## 功能特性
 
-- **自动化部署**：一键安装依赖、下载二进制文件、配置并启动服务
+- **一键部署**：直接下载脚本，无需克隆整个仓库
+- **自动化安装**：自动安装依赖、下载二进制文件、配置并启动服务
 - **API 模式**：通过 Cloudflare API 自动创建固定隧道（Named Tunnel）
 - **智能端口管理**：自动检测空闲端口，动态配置 ingress 规则
 - **同名隧道处理**：检测到同名隧道时自动删除并重建（支持重试机制）
@@ -20,40 +21,65 @@
 
 ## 快速开始
 
-### 1. 克隆仓库
+### 1. 下载脚本并赋予执行权限
 
 ```bash
-git clone https://github.com/liwoyuandiane/001-note.git
-cd 001-note/x-tunnel
+curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/x-tunnel/suoha-x.sh -o suoha-x.sh
+chmod +x suoha-x.sh
 ```
 
-### 2. 配置环境变量
+### 2. 创建并配置 .env 文件
+
+参考以下模板创建 `.env` 文件：
 
 ```bash
-cp .env.example .env
-nano .env
-```
+cat > .env << 'EOF'
+########################
+# Cloudflare 认证（二选一）
+########################
 
-编辑 `.env` 文件，填入你的 Cloudflare 认证信息和域名配置：
-
-```bash
-# Cloudflare API Token（推荐）
+# 推荐：API Token（更安全）
 cf_api_token="YOUR_CLOUDFLARE_API_TOKEN"
 
-# 或 Global API Key（备选）
+# 备选：Global API Key（不推荐）
 # cf_email="you@example.com"
-# cf_global_key="YOUR_GLOBAL_API_KEY"
+# cf_global_key="YOUR_CLOUDFLARE_GLOBAL_API_KEY"
 
-# 域名配置（必填）
+########################
+# 隧道与域名配置（必填）
+########################
+
+# 要绑定的完整域名
 cf_domain="x-tunnel-1.example.com"
+
+# 域名所在的 Zone
 cf_zone="example.com"
+
+# Tunnel 名称
 cf_tunnel_name="x-tunnel-1"
+
+########################
+# 可选配置
+########################
+
+# x-tunnel 监听端口（留空则自动分配）
+# port="30000"
+
+# cloudflared IP 版本（4 或 6，默认 4）
+ips="4"
+EOF
+```
+
+然后编辑 `.env` 文件，填入你的真实配置：
+
+```bash
+nano .env
 ```
 
 ### 3. 启动服务
 
 ```bash
-./suoha-x.sh install -m api -e -z example.com
+./suoha-x.sh install -m api -e
 ```
 
 ## 使用说明
@@ -93,10 +119,10 @@ cf_tunnel_name="x-tunnel-1"
 ### 使用示例
 
 ```bash
-# 使用 .env 文件启动
-./suoha-x.sh install -m api -e -z example.com
+# 使用 .env 文件启动（推荐）
+./suoha-x.sh install -m api -e
 
-# 命令行直接指定参数
+# 命令行直接指定参数（不使用 .env 文件）
 ./suoha-x.sh install -m api \
   -T "YOUR_API_TOKEN" \
   -d "tunnel.example.com" \
@@ -171,15 +197,14 @@ cf_tunnel_name="x-tunnel-1"
 
 可通过 `LOG_DIR` 环境变量自定义日志目录。
 
-## 项目结构
+## 项目文件
 
 ```
-x-tunnel/
-├── suoha-x.sh      # 主脚本文件
-├── .env.example    # 环境变量示例模板
-├── .env            # 本地配置文件（不提交到 Git）
-├── .tunnel_info    # 自动生成的隧道信息（不提交到 Git）
-└── README.md       # 项目说明文档
+工作目录/
+├── suoha-x.sh      # 主脚本文件（下载）
+├── .env            # 本地配置文件（手动创建）
+├── .tunnel_info    # 自动生成的隧道信息
+└── *.log           # 日志文件
 ```
 
 ## 许可证
