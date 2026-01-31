@@ -21,31 +21,13 @@
 
 ## 快速开始
 
-### 方式一：使用环境变量
-
-#### 1. 下载脚本
+### 一键下载并提权
 
 ```bash
-chmod +x cf-tunnel.sh
+curl -o cf-tunnel.sh https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/cloudflared-cf-tunnel/cf-tunnel.sh && chmod +x cf-tunnel.sh
 ```
 
-#### 2. 配置环境变量
-
-```bash
-export CF_EMAIL="your-email@example.com"
-export CF_GLOBAL_KEY="your-global-api-key"
-export DOMAIN="sub.example.com"
-export TUNNEL_NAME="my-tunnel"
-export LOCAL_PORT="8080"
-```
-
-#### 3. 启动隧道
-
-```bash
-./cf-tunnel.sh run
-```
-
-### 方式二：使用命令行参数
+### 启动隧道（命令行参数方式）
 
 ```bash
 ./cf-tunnel.sh -e "your-email@example.com" \
@@ -65,6 +47,17 @@ export LOCAL_PORT="8080"
 ### 启动隧道
 
 ```bash
+./cf-tunnel.sh -e "your-email@example.com" -k "your-global-api-key" -d "sub.example.com" -n "my-tunnel" -p "8080" -c run
+```
+
+或使用环境变量方式：
+
+```bash
+export CF_EMAIL="your-email@example.com"
+export CF_GLOBAL_KEY="your-global-api-key"
+export DOMAIN="sub.example.com"
+export TUNNEL_NAME="my-tunnel"
+export LOCAL_PORT="8080"
 ./cf-tunnel.sh run
 ```
 
@@ -80,28 +73,52 @@ export LOCAL_PORT="8080"
 ### 停止服务
 
 ```bash
+./cf-tunnel.sh -c stop
+```
+
+或
+
+```bash
 ./cf-tunnel.sh stop
 ```
 
-停止 cloudflared 进程并清理 PID 文件。
-
 ### 重启服务
+
+```bash
+./cf-tunnel.sh -c restart
+```
+
+或
 
 ```bash
 ./cf-tunnel.sh restart
 ```
 
-先停止现有服务，再重新启动。
-
 ### 查看状态
+
+```bash
+./cf-tunnel.sh -c status
+```
+
+或
 
 ```bash
 ./cf-tunnel.sh status
 ```
 
-显示隧道配置信息和运行状态。
-
 ### 显示帮助
+
+```bash
+./cf-tunnel.sh -h
+```
+
+或
+
+```bash
+./cf-tunnel.sh --help
+```
+
+或
 
 ```bash
 ./cf-tunnel.sh help
@@ -109,17 +126,7 @@ export LOCAL_PORT="8080"
 
 ## 参数说明
 
-### 环境变量方式
-
-| 参数 | 说明 | 获取方式 |
-|------|------|----------|
-| `CF_EMAIL` | Cloudflare 账户邮箱 | 登录 Cloudflare 面板 |
-| `CF_GLOBAL_KEY` | Global API Key | [获取链接](https://dash.cloudflare.com/profile/api-tokens) |
-| `DOMAIN` | 要绑定的域名 | 需已在 Cloudflare 托管 |
-| `TUNNEL_NAME` | 隧道名称 | 自定义，重复时自动重建 |
-| `LOCAL_PORT` | 本地监听端口 | 需确保本地服务已启动 |
-
-### 命令行参数方式
+### 命令行参数
 
 | 参数 | 短参数 | 说明 | 对应环境变量 |
 |------|--------|------|--------------|
@@ -131,6 +138,16 @@ export LOCAL_PORT="8080"
 | `--command` | `-c` | 执行的命令（run/stop/restart/status） | - |
 | `--help` | `-h` | 显示帮助 | - |
 
+### 环境变量
+
+| 参数 | 说明 | 获取方式 |
+|------|------|----------|
+| `CF_EMAIL` | Cloudflare 账户邮箱 | 登录 Cloudflare 面板 |
+| `CF_GLOBAL_KEY` | Global API Key | [获取链接](https://dash.cloudflare.com/profile/api-tokens) |
+| `DOMAIN` | 要绑定的域名 | 需已在 Cloudflare 托管 |
+| `TUNNEL_NAME` | 隧道名称 | 自定义，重复时自动重建 |
+| `LOCAL_PORT` | 本地监听端口 | 需确保本地服务已启动 |
+
 ## 获取 API Key
 
 1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com)
@@ -140,20 +157,7 @@ export LOCAL_PORT="8080"
 
 ## 使用示例
 
-### 示例 1：启动本地开发服务（环境变量方式）
-
-```bash
-export CF_EMAIL="user@example.com"
-export CF_GLOBAL_KEY="xxxxxxxxxxxxxx"
-export DOMAIN="dev.example.com"
-export TUNNEL_NAME="dev-tunnel"
-export LOCAL_PORT="3000"
-./cf-tunnel.sh run
-```
-
-访问 `https://dev.example.com` 即可访问本地 3000 端口。
-
-### 示例 2：启动本地开发服务（命令行参数方式）
+### 示例 1：启动本地开发服务（命令行参数方式，推荐）
 
 ```bash
 ./cf-tunnel.sh -e "user@example.com" \
@@ -164,21 +168,31 @@ export LOCAL_PORT="3000"
                 -c run
 ```
 
-### 示例 3：通过一行命令启动（环境变量方式）
+访问 `https://dev.example.com` 即可访问本地 3000 端口。
+
+### 示例 2：启动本地开发服务（环境变量方式）
 
 ```bash
-CF_EMAIL="user@example.com" \
-CF_GLOBAL_KEY="xxxxxxxxxxxxxx" \
-DOMAIN="app.example.com" \
-TUNNEL_NAME="app-tunnel" \
-LOCAL_PORT="8080" \
+export CF_EMAIL="user@example.com"
+export CF_GLOBAL_KEY="xxxxxxxxxxxxxx"
+export DOMAIN="dev.example.com"
+export TUNNEL_NAME="dev-tunnel"
+export LOCAL_PORT="3000"
 ./cf-tunnel.sh run
 ```
 
-### 示例 4：通过一行命令启动（命令行参数方式）
+### 示例 3：一行命令启动
 
 ```bash
 ./cf-tunnel.sh -e "user@example.com" -k "xxxxxxxxxxxxxx" -d "app.example.com" -n "app-tunnel" -p "8080" -c run
+```
+
+### 示例 4：混合使用（部分参数通过命令行，部分通过环境变量）
+
+```bash
+export CF_EMAIL="user@example.com"
+export CF_GLOBAL_KEY="xxxxxxxxxxxxxx"
+./cf-tunnel.sh -d "app.example.com" -n "app-tunnel" -p "8080" -c run
 ```
 
 ### 示例 5：使用环境变量文件
@@ -200,14 +214,6 @@ set -a
 source .env
 set +a
 ./cf-tunnel.sh run
-```
-
-### 示例 6：混合使用（部分参数通过命令行，部分通过环境变量）
-
-```bash
-export CF_EMAIL="user@example.com"
-export CF_GLOBAL_KEY="xxxxxxxxxxxxxx"
-./cf-tunnel.sh -d "app.example.com" -n "app-tunnel" -p "8080" -c run
 ```
 
 ## 生成的文件
