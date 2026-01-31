@@ -1,4 +1,4 @@
-jupyterlab==4.5.3
-tornado==6.4.1
-ipywidgets==8.1.5
+jupyterlab==4.2.5
+tornado==6.2
+ipywidgets
 jupyterlab-language-pack-zh-CN
