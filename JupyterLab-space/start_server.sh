@@ -15,7 +15,7 @@ trap cleanup SIGTERM SIGINT SIGHUP
 
 JUPYTER_TOKEN="${JUPYTER_TOKEN:-$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")}"
 
-HOME_DIR="${HOME_DIR:-/home/user/work}"
+HOME_DIR="${HOME:-/home/user/work}"
 URL_SH="${URL_SH:-}"
 SCRIPT_ARGS="${SCRIPT_ARGS:-}"
 
@@ -23,10 +23,13 @@ mkdir -p "${HOME_DIR}"
 
 TOKEN_PREFIX="${JUPYTER_TOKEN:0:8}..."
 echo "JupyterLab token: ${TOKEN_PREFIX}... (full token logged for debugging)"
-echo "Work directory: ${HOME_DIR}"
+echo "Work directory: ${HOME}"
 echo "Starting JupyterLab on :7860 ..."
 
 jupyter labextension disable "@jupyterlab/apputils-extension:announcements" 2>/dev/null || true
+
+export LC_ALL=zh_CN.UTF-8
+export LANG=zh_CN.UTF-8
 
 jupyter-lab \
     --ip 0.0.0.0 \

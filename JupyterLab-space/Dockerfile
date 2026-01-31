@@ -70,6 +70,8 @@ RUN chmod +x start_server.sh && \
 ENV PYTHONUNBUFFERED=1 \
     SYSTEM=spaces \
     SHELL=/bin/bash \
+    LANG=zh_CN.UTF-8 \
+    LC_ALL=zh_CN.UTF-8 \
     LABEL maintainer="JupyterLab Space"
 
 CMD ["./start_server.sh"]

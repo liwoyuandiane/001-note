@@ -16,7 +16,7 @@
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `JUPYTER_TOKEN` | Jupyter 访问 token | 自动生成 32 位随机字符串 |
-| `HOME_DIR` | 工作目录 | `/home/user/work` |
+| `HOME` | 工作目录 | `/home/user/work` |
 | `URL_SH` | 启动后下载并执行的脚本 URL | 无 |
 | `SCRIPT_ARGS` | 传给脚本的参数 | 无 |
 
@@ -38,7 +38,7 @@ docker run -e JUPYTER_TOKEN=my_secret_token -p 7860:7860 jupyterlab-space
 ### 3. 自定义工作目录
 
 ```bash
-docker run -e HOME_DIR=/data -p 7860:7860 jupyterlab-space
+docker run -e HOME=/data -p 7860:7860 jupyterlab-space
 ```
 
 ### 4. 启动后执行脚本
@@ -66,7 +66,7 @@ docker run -e URL_SH="https://example.com/setup.sh" -e SCRIPT_ARGS="--install-de
 在 Hugging Face Spaces 的 **Settings → Variables and secrets** 中添加：
 
 - `JUPYTER_TOKEN` - 自定义访问 token（可选）
-- `HOME_DIR` - 工作目录（可选）
+- `HOME` - 工作目录（可选）
 - `URL_SH` - 启动脚本 URL（可选）
 - `SCRIPT_ARGS` - 脚本参数（可选）
 
@@ -86,7 +86,7 @@ docker run -e URL_SH="https://example.com/setup.sh" -e SCRIPT_ARGS="--install-de
 - **基础镜像**: Ubuntu 22.04
 - **Python 版本**: 3.9 (Miniconda)
 - **Node.js 版本**: 20.x
-- **JupyterLab 版本**: 4.2.5
+- **JupyterLab 版本**: 4.5.3
 - **默认端口**: 7860
 - **默认用户**: user (UID 1000)
 - **镜像大小**: ~2.5 GB
