@@ -1,50 +1,62 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-if [ -z "$TTYD_CREDENTIAL" ]; then
-    echo "错误: 必须设置 TTYD_CREDENTIAL 环境变量才能启动服务"
-    echo "请在 Hugging Face Spaces Settings 中设置 TTYD_CREDENTIAL 环境变量"
-    echo "格式: 用户名:密码 (例如: admin:MySecurePassword123!)"
-    exit 1
+# ---- Required env ----
+if [[ -z "${TTYD_CREDENTIAL:-}" ]]; then
+  echo "错误: 必须设置 TTYD_CREDENTIAL 环境变量 (格式: 用户名:密码)"
+  echo "请在 Hugging Face Spaces -> Settings -> Variables and secrets 中添加"
+  exit 1
 fi
 
-if [ -n "$url_sh" ] && [ -z "$home" ]; then
-    echo "错误: 设置了 url_sh 但未设置 home 环境变量"
-    echo "请同时设置 url_sh 和 home 环境变量"
-    exit 1
-fi
+# ---- Optional env (with defaults) ----
+HOME_DIR="${home:-/home/user/work}"
+URL_SH="${url_sh:-}"
+SCRIPT_ARGS="${script_args:-}"
 
-mkdir -p "$home"
-cd "$home"
+# ttyd 日志级别（bitmask）：默认 3=ERR(1)+WARN(2)，更安静。
+# 如需更多日志：TTYD_DEBUG=7（ERR+WARN+NOTICE），或 15（再加 INFO）。
+TTYD_DEBUG="${TTYD_DEBUG:-3}"
 
-echo "正在下载脚本: $url_sh"
-SCRIPT_NAME=$(basename "$url_sh")
-curl -L -o "$SCRIPT_NAME" "$url_sh"
+mkdir -p "${HOME_DIR}"
 
-echo "启动 ttyd 服务..."
-ttyd -p 7860 -c "$TTYD_CREDENTIAL" --writable -q bash &
+echo "启动 ttyd on :7860 ..."
+
+# 注意：不要使用 -q！在 ttyd 中 -q 是 --exit-no-conn（无人连接就退出），在 Spaces 上会导致服务退出。
+# -d 控制日志级别（默认 7）。
+
+ttyd -p 7860 -c "${TTYD_CREDENTIAL}" -W -d "${TTYD_DEBUG}" bash &
 TTYD_PID=$!
 
-echo "ttyd 已启动 (PID: $TTYD_PID)"
+sleep 1
+echo "ttyd 已启动 (PID: ${TTYD_PID})"
 
-sleep 2
-
-echo "正在执行自定义脚本: $SCRIPT_NAME"
-if [ -n "$script_args" ]; then
-    echo "使用参数: $script_args"
-    . "$SCRIPT_NAME" $script_args
-else
-    echo "无参数，直接执行"
-    . "$SCRIPT_NAME"
+# ---- Download & run optional script ----
+if [[ -n "${URL_SH}" ]]; then
+  echo "从 ${URL_SH} 下载脚本..."
+  cd "${HOME_DIR}"
+  SCRIPT_NAME="$(basename "${URL_SH}")"
+  curl -fsSL -o "${SCRIPT_NAME}" "${URL_SH}"
+  chmod +x "${SCRIPT_NAME}"
+  echo "执行脚本: ${SCRIPT_NAME} ${SCRIPT_ARGS}"
+  if [[ -n "${SCRIPT_ARGS}" ]]; then
+    bash "${SCRIPT_NAME}" ${SCRIPT_ARGS}
+  else
+    bash "${SCRIPT_NAME}"
+  fi
 fi
 
-for script in "$home"/*.sh; do
-    if [ -f "$script" ]; then
-        echo "执行脚本: $script"
-        if [ -n "$script_args" ]; then
-            . "$script" $script_args
-        else
-            . "$script"
-        fi
-    done
+# ---- Run all local *.sh under HOME_DIR (if any) ----
+shopt -s nullglob
+for script in "${HOME_DIR}"/*.sh; do
+  if [[ -f "${script}" ]]; then
+    echo "执行脚本: ${script} ${SCRIPT_ARGS}"
+    if [[ -n "${SCRIPT_ARGS}" ]]; then
+      bash "${script}" ${SCRIPT_ARGS}
+    else
+      bash "${script}"
+    fi
+  fi
+done
+shopt -u nullglob
 
-wait $TTYD_PID
+wait "${TTYD_PID}"
