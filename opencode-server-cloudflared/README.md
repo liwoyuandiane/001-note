@@ -19,6 +19,6 @@
 - 安装与启动（示例，替换 CF 密钥；可选传入公网域名用于 status 显示）：
 
 ```bash
-bash -lc 'curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/main/opencode-server-cloudflared/opencode-server-cloudflared.sh -o opencode.sh && \
-chmod +x opencode.sh && \
-bash ./opencode.sh install -p 56780 -u opencode -P "Admin@12345678" -t YOUR_CF_TOKEN -H app.example.com'
+bash -lc 'curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/main/opencode-server-cloudflared/opencode-server-cloudflared.sh -o opencode-server-cloudflared.sh && \
+chmod +x opencode-server-cloudflared.sh && \
+bash ./opencode-server-cloudflared.sh install -p 56780 -u opencode -P "Admin@12345678" -t YOUR_CF_TOKEN'
