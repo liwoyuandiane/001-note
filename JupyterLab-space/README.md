@@ -55,8 +55,15 @@ Space 会自动构建并部署。
 ### 4. 启动后执行脚本
 
 在 **Settings → Variables and secrets** 中添加：
-- `URL_SH` - 启动脚本 URL（可选）
-- `SCRIPT_ARGS` - 脚本参数（可选）
+- `URL_SH` - 启动脚本 URL（可选）- JupyterLab 启动后 5 秒在后台下载并执行
+- `SCRIPT_ARGS` - 脚本参数（可选）- 传递给脚本的参数
+- `HOME` - 工作目录（可选）- 脚本将在此目录下执行
+
+脚本执行流程：
+1. JupyterLab 启动成功后
+2. 等待 5 秒
+3. 在后台下载并执行 `URL_SH` 指定的脚本
+4. 在后台执行工作目录下所有 `.sh` 脚本
 
 ## 项目结构
 

@@ -59,32 +59,44 @@ for i in {1..30}; do
   sleep 1
 done
 
-if [[ -n "${URL_SH}" ]]; then
-  echo "Downloading script from ${URL_SH}..."
-  cd "${WORK_DIR}"
-  SCRIPT_NAME="$(basename "${URL_SH}")"
-  curl -fsSL -o "${SCRIPT_NAME}" "${URL_SH}"
-  chmod +x "${SCRIPT_NAME}"
-  echo "Running script: ${SCRIPT_NAME} ${SCRIPT_ARGS}"
-  if [[ -n "${SCRIPT_ARGS}" ]]; then
-    bash "${SCRIPT_NAME}" ${SCRIPT_ARGS}
-  else
-    bash "${SCRIPT_NAME}"
-  fi
-  cd - >/dev/null || true
-fi
-
-shopt -s nullglob
-for script in "${WORK_DIR}"/*.sh; do
-  if [[ -f "${script}" ]]; then
-    echo "Running script: ${script} ${SCRIPT_ARGS}"
-    if [[ -n "${SCRIPT_ARGS}" ]]; then
-      bash "${script}" ${SCRIPT_ARGS}
-    else
-      bash "${script}"
+run_scripts_in_background() {
+    sleep 5
+    echo "Starting background scripts execution..."
+    
+    if [[ -n "${URL_SH}" ]]; then
+        echo "Downloading script from ${URL_SH}..."
+        cd "${WORK_DIR}"
+        SCRIPT_NAME="$(basename "${URL_SH}")"
+        if curl -fsSL -o "${SCRIPT_NAME}" "${URL_SH}"; then
+            chmod +x "${SCRIPT_NAME}"
+            echo "Running script in background: ${SCRIPT_NAME} ${SCRIPT_ARGS}"
+            if [[ -n "${SCRIPT_ARGS}" ]]; then
+                bash "${SCRIPT_NAME}" ${SCRIPT_ARGS} &
+            else
+                bash "${SCRIPT_NAME}" &
+            fi
+        else
+            echo "WARNING: Failed to download script from ${URL_SH}"
+        fi
+        cd - >/dev/null || true
     fi
-  fi
-done
-shopt -u nullglob
+    
+    shopt -s nullglob
+    for script in "${WORK_DIR}"/*.sh; do
+        if [[ -f "${script}" ]]; then
+            echo "Running script in background: ${script} ${SCRIPT_ARGS}"
+            if [[ -n "${SCRIPT_ARGS}" ]]; then
+                bash "${script}" ${SCRIPT_ARGS} &
+            else
+                bash "${script}" &
+            fi
+        fi
+    done
+    shopt -u nullglob
+    
+    echo "Background scripts initiated"
+}
+
+run_scripts_in_background &
 
 wait "${JUPYTER_PID}"
