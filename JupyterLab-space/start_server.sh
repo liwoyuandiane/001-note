@@ -36,9 +36,9 @@ jupyter-lab \
     --port 7860 \
     --no-browser \
     --allow-root \
-    --ServerApp.token="$JUPYTER_TOKEN" \
-    --ServerApp.tornado_settings="{'headers': {'Content-Security-Policy': \"default-src 'self' https://huggingface.co https://*.huggingface.co; frame-ancestors https://huggingface.co https://*.huggingface.co; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';\"}}" \
-    --ServerApp.cookie_options="{'SameSite': 'None', 'Secure': True}" \
+    --IdentityProvider.token="$JUPYTER_TOKEN" \
+    --IdentityProvider.cookie_options="{'SameSite': 'None', 'Secure': True}" \
+    --ServerApp.tornado_settings="{'headers': {'Content-Security-Policy': \"default-src 'self' blob: data: https: *; frame-ancestors *; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; connect-src 'self' https: wss:;\"}}" \
     --LabApp.news_url=None \
     --LabApp.check_for_updates_class="jupyterlab.NeverCheckForUpdate" \
     --notebook-dir="${WORK_DIR}" &

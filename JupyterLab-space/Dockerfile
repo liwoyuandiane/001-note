@@ -61,10 +61,7 @@ WORKDIR /home/user/app
 
 COPY --chown=user:user start_server.sh login.html .
 
-RUN chmod +x start_server.sh && \
-    /home/user/miniconda/bin/python3 -c "import jupyter_server, os; print(os.path.dirname(jupyter_server.__file__))" > /tmp/jupyter_server_path && \
-    mkdir -p "$(cat /tmp/jupyter_server_path)/templates" 2>/dev/null || true && \
-    cp login.html "$(cat /tmp/jupyter_server_path)/templates/login.html" 2>/dev/null || true
+RUN chmod +x start_server.sh
 
 ENV HOME=/home/user \
     CONDA_AUTO_UPDATE_CONDA=false \
