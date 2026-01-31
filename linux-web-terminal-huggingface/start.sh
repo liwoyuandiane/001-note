@@ -9,9 +9,9 @@ if [[ -z "${TTYD_CREDENTIAL:-}" ]]; then
 fi
 
 # ---- Optional env (with defaults) ----
-HOME_DIR="${home:-/home/user/work}"
-URL_SH="${url_sh:-}"
-SCRIPT_ARGS="${script_args:-}"
+HOME_DIR="${HOME:-/home/user/work}"
+URL_SH="${URL_SH:-}"
+SCRIPT_ARGS="${SCRIPT_ARGS:-}"
 
 # ttyd 日志级别（bitmask）：默认 3=ERR(1)+WARN(2)，更安静。
 # 如需更多日志：TTYD_DEBUG=7（ERR+WARN+NOTICE），或 15（再加 INFO）。
