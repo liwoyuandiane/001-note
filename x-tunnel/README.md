@@ -1,96 +1,180 @@
----
-title: Ubuntu Web Terminal (ttyd)
-emoji: 🖥️
-colorFrom: blue
-colorTo: gray
-sdk: docker
-app_port: 7860
----
+# x-tunnel
 
-# Ubuntu Web Terminal (ttyd) for Hugging Face Spaces
+一个自动化管理 Cloudflare Tunnel 的 Bash 脚本，用于快速部署 x-tunnel 服务并通过 Cloudflare Argo Tunnel 暴露到公网。
 
-一个基于 **Ubuntu 22.04** 的 Web 终端，使用 **ttyd** 提供浏览器访问，适配 **Hugging Face Spaces（Docker SDK）**。
+## 功能特性
 
-## 特性
+- **一键部署**：直接下载脚本，无需克隆整个仓库
+- **自动化安装**：自动安装依赖、下载二进制文件、配置并启动服务
+- **API 模式**：通过 Cloudflare API 自动创建固定隧道（Named Tunnel）
+- **智能端口管理**：自动检测空闲端口，动态配置 ingress 规则
+- **同名隧道处理**：检测到同名隧道时自动删除并重建（支持重试机制）
+- **日志管理**：内置日志轮转，支持 logrotate 系统集成
+- **多架构支持**：自动识别系统架构（amd64/arm64/386）
+- **灵活认证**：支持 Cloudflare API Token 或 Global API Key
 
-- ✅ **Hugging Face Spaces 兼容**：容器按官方建议使用 **UID=1000** 的非 root 用户运行，减少权限问题。
-- 🔐 **访问控制**：通过 `TTYD_CREDENTIAL` 开启 HTTP Basic Auth。
-- 🔓 **免密 sudo**：容器内 `user` 账号支持 `sudo` **无需密码**（NOPASSWD）。
-- 🧘 **更安静的日志**：默认 `TTYD_DEBUG=3`（仅 ERR+WARN），减少 `N: __lws_*` 这类 NOTICE 刷屏。
-- 🧰 常用工具：vim / nano / git / htop / ping / net-tools / tree 等。
+## 系统要求
 
-> ⚠️ 安全提醒：免密 sudo + Web 终端意味着一旦凭据泄露，攻击者可能获得容器内 root 权限。请使用强密码并定期更换。
+- Linux 操作系统（Debian/Ubuntu/CentOS/RHEL/Alpine 等）
+- root 权限或 sudo 访问权限
+- 已注册 Cloudflare 账号并添加域名
 
----
+## 快速开始
 
-## 目录结构
+### 1. 下载脚本并赋予执行权限
 
-仓库根目录应包含：
+```bash
+curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/x-tunnel/suoha-x.sh -o suoha-x.sh
+chmod +x suoha-x.sh
+```
 
-- `Dockerfile`
-- `start.sh`
-- `README.md`
+### 2. 创建并配置 .env 文件
 
-（不要只上传 zip；Spaces 不会自动解压。）
+下载模板文件并重命名为 `.env`，然后编辑：
 
----
+```bash
+curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/x-tunnel/.env.example -o .env
+nano .env
+```
 
-## 部署到 Hugging Face Spaces
+填入你的 Cloudflare 认证信息和域名配置即可。
 
-1. 新建 Space，选择 **Docker** 作为 SDK。
-2. 上传本仓库 3 个文件到 Space 根目录并 Commit。
-3. 在 Space 页面 **Settings → Variables and secrets** 设置环境变量：
+### 3. 启动服务
 
-### 必填变量
-
-- `TTYD_CREDENTIAL`：格式 `用户名:密码`
-  - 示例：`admin:MySecurePassword123!`
-
-### 可选变量
-
-- `TTYD_DEBUG`：ttyd 日志级别（bitmask）
-  - 默认：`3`（ERR+WARN，推荐）
-  - 排障：`7`（ERR+WARN+NOTICE）
-  - 更详细：`15`（再加 INFO）
-- `home`：工作目录（默认 `/home/user/work`）
-- `url_sh`：启动后下载并执行的脚本 URL
-- `script_args`：传给脚本的参数
-
-> 说明：HTTP Basic Auth 在浏览器端可能会被缓存，所以你可能不会每次都看到弹窗；使用无痕窗口或更换设备可验证。
-
----
+```bash
+./suoha-x.sh install -m api -e
+```
 
 ## 使用说明
 
-- 打开 Space 的 App 页面，即可进入 Web 终端。
-- 免密 sudo 示例：
+### 命令格式
 
 ```bash
-sudo -i
-sudo apt-get update
+./suoha-x.sh <command> [options]
 ```
 
----
+### 可用命令
 
-## 本地运行（可选）
+| 命令 | 说明 |
+|------|------|
+| `install` | 安装并启动服务 |
+| `stop` | 停止所有服务 |
+| `remove` | 卸载并清理所有资源 |
+| `status` | 查看服务运行状态 |
+
+### 参数选项
+
+| 选项 | 说明 |
+|------|------|
+| `-m, --mode` | 运行模式（仅支持 `api`） |
+| `-e, --env` | 从 `.env` 文件加载配置 |
+| `-z, --zone` | 指定 Cloudflare Zone |
+| `-d, --domain` | 指定绑定的域名 |
+| `-n, --name` | 指定 Tunnel 名称 |
+| `-p, --port` | 指定 x-tunnel 监听端口 |
+| `-i, --ips` | cloudflared IP 版本（4 或 6） |
+| `-x, --token` | x-tunnel 认证 token |
+| `-E, --email` | Cloudflare 邮箱 |
+| `-G, --global-key` | Cloudflare Global API Key |
+| `-T, --api-token` | Cloudflare API Token |
+| `-h, --help` | 显示帮助信息 |
+
+### 使用示例
 
 ```bash
-docker build -t hf-ttyd .
-docker run --rm -p 7860:7860 -e TTYD_CREDENTIAL=admin:pass hf-ttyd
+# 使用 .env 文件启动（推荐）
+./suoha-x.sh install -m api -e
+
+# 命令行直接指定参数（不使用 .env 文件）
+./suoha-x.sh install -m api \
+  -T "YOUR_API_TOKEN" \
+  -d "tunnel.example.com" \
+  -z "example.com" \
+  -n "my-tunnel"
+
+# 停止服务
+./suoha-x.sh stop
+
+# 查看状态
+./suoha-x.sh status
+
+# 完全卸载
+./suoha-x.sh remove
 ```
 
-然后访问 `http://localhost:7860`。
+## 配置说明
 
----
+### Cloudflare API Token 权限要求
 
-## 参考
+创建 API Token 时需要以下权限：
 
-- Hugging Face Docker Spaces：端口 7860、以及容器以 UID 1000 运行等注意事项。
-- ttyd 参数说明：`-d` 设置日志级别，`-q` 为 `--exit-no-conn`（不要用）。
-- libwebsockets 日志位：ERR/WARN/NOTICE/INFO 等是 bitmask 组合。
+- **Account**: Cloudflare Tunnel (Edit)
+- **Zone**: DNS (Edit)
 
----
+### 环境变量说明
 
-## License
+| 变量名 | 必填 | 说明 |
+|--------|------|------|
+| `cf_api_token` | 二选一 | Cloudflare API Token（推荐） |
+| `cf_email` | 二选一 | Cloudflare 账号邮箱 |
+| `cf_global_key` | 二选一 | Cloudflare Global API Key |
+| `cf_domain` | 是 | 要绑定的完整域名 |
+| `cf_zone` | 强烈建议 | 域名所在的 Zone |
+| `cf_tunnel_name` | 是 | Tunnel 名称 |
+| `token` | 否 | x-tunnel 认证 token |
+| `port` | 否 | x-tunnel 监听端口（留空则自动分配） |
+| `ips` | 否 | cloudflared IP 版本（默认 4） |
+| `LOG_DIR` | 否 | 日志目录（默认当前目录） |
 
-MIT
+## 常见问题
+
+### 错误码 1022：无法删除 Tunnel（active connections）
+
+当脚本检测到同名 Tunnel 时，会先尝试删除旧 Tunnel 再创建新的。如果 Cloudflare 返回 1022（提示 Cannot delete tunnel because it has active connections），说明该 Tunnel 仍被某个 cloudflared 实例认为"在线"，因此 Cloudflare 拒绝删除。
+
+**解决方法：**
+
+1. **先执行停止命令（推荐）：**
+   ```bash
+   ./suoha-x.sh stop
+   ```
+
+2. **如果仍然报错，手动执行 cleanup：**
+   ```bash
+   ./cloudflared-linux tunnel cleanup <TUNNEL_ID>
+   ```
+
+3. **cleanup 需要 origin certificate（cert.pem）**。若提示找不到 cert.pem，请先执行：
+   ```bash
+   ./cloudflared-linux tunnel login
+   ```
+   然后将证书放到默认路径（例如 `~/.cloudflared/cert.pem`），或通过 `--origincert` 或环境变量 `TUNNEL_ORIGIN_CERT` 指定证书路径。
+
+### 日志位置
+
+默认日志保存在脚本运行目录：
+
+- `x-tunnel.log` - x-tunnel 服务日志
+- `cloudflared.log` - cloudflared 日志
+- `opera.log` - opera 服务日志（如启用）
+
+可通过 `LOG_DIR` 环境变量自定义日志目录。
+
+## 项目文件
+
+```
+工作目录/
+├── suoha-x.sh      # 主脚本文件（下载）
+├── .env            # 本地配置文件（手动创建）
+├── .tunnel_info    # 自动生成的隧道信息
+└── *.log           # 日志文件
+```
+
+## 许可证
+
+MIT License
+
+## 致谢
+
+- [cloudflared](https://github.com/cloudflare/cloudflared) - Cloudflare 官方隧道客户端
+- [x-tunnel](https://www.baipiao.eu.org/) - x-tunnel 二进制分发
