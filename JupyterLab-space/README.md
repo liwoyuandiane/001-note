@@ -4,7 +4,7 @@ emoji: 💻
 colorFrom: gray
 colorTo: green
 sdk: docker
-sdk_version: "4.2.5"
+sdk_version: "4.5.3"
 python_version: "3.9"
 pinned: false
 tags:
@@ -20,25 +20,21 @@ tags:
 
 ## 功能特性
 
-- **JupyterLab 4.2.5** - 交互式 Python 开发环境（中文界面）
+- **JupyterLab 4.5.3** - 交互式 Python 开发环境（中文界面）
 - **多阶段构建** - 优化镜像体积
 - **GPU 支持** - 预留 CUDA 环境配置
-- **Token** - 默认 `huggingface`
+- **自动生成 Token** - 默认生成 32 位安全随机 token
 - **灵活配置** - 支持自定义工作目录和启动脚本
 - **安全加固** - XSRF 保护、CSP 策略、sudo 免密
-- **中文支持** - 默认中文界面
 
 ## 环境变量
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `JUPYTER_TOKEN` | Jupyter 访问 token | `huggingface` |
-| `HOME` | 工作目录 | `/data` |
+| `JUPYTER_TOKEN` | Jupyter 访问 token | 自动生成 32 位随机字符串 |
+| `HOME` | 工作目录 | `/home/user/work` |
 | `URL_SH` | 启动后下载并执行的脚本 URL | 无 |
 | `SCRIPT_ARGS` | 传给脚本的参数 | 无 |
-| `JUPYTERLOB` | JupyterLab 启动模式：`1`=自动启动，`0`=手动启动 | `1` |
-| `LANG` | 语言设置 | `zh_CN.UTF-8` |
-| `LC_ALL` | 语言设置 | `zh_CN.UTF-8` |
 
 ## 使用方法
 
@@ -69,30 +65,6 @@ Space 会自动构建并部署。
 3. 在后台下载并执行 `URL_SH` 指定的脚本
 4. 在后台执行工作目录下所有 `.sh` 脚本
 
-### 5. 手动启动 JupyterLab 模式
-
-在 **Settings → Variables and secrets** 中添加：
-- `JUPYTERLOB=0` - 设置为手动启动模式
-
-启用后：
-- 容器启动后 JupyterLab **不会**自动启动
-- 自动生成 `start_jupyter.sh` 辅助启动脚本
-- 用户可以执行 `bash /home/user/app/start_jupyter.sh` 手动启动
-- 后台脚本仍会在 5 秒后执行
-
-### 6. 自动启动 JupyterLab 模式（默认）
-
-- 不设置或设置 `JUPYTERLOB=1` - JupyterLab 随容器自动启动
-- 这是默认行为
-
-### 7. 语言设置
-
-JupyterLab 默认使用中文界面。如需切换语言：
-1. 打开 JupyterLab 设置
-2. 选择 Language 为其他语言
-
-## 故障排除
-
 ## 项目结构
 
 ```
@@ -106,10 +78,10 @@ JupyterLab 默认使用中文界面。如需切换语言：
 
 ## 镜像规格
 
-- **基础镜像**: NVIDIA CUDA 12.5.1 + Ubuntu 20.04
+- **基础镜像**: Ubuntu 22.04
 - **Python 版本**: 3.9 (Miniconda)
 - **Node.js 版本**: 20.x
-- **JupyterLab 版本**: 4.2.5
+- **JupyterLab 版本**: 4.5.3
 - **默认端口**: 7860
 - **默认用户**: user (UID 1000)
 - **镜像大小**: ~2.5 GB
