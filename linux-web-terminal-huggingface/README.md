@@ -52,9 +52,9 @@ app_port: 7860
   - 默认：`3`（ERR+WARN，推荐）
   - 排障：`7`（ERR+WARN+NOTICE）
   - 更详细：`15`（再加 INFO）
-- `home`：工作目录（默认 `/home/user/work`）
-- `url_sh`：启动后下载并执行的脚本 URL
-- `script_args`：传给脚本的参数
+- `HOME`：工作目录（默认 `/home/user/work`）
+- `URL_SH`：启动后下载并执行的脚本 URL
+- `SCRIPT_ARGS`：传给脚本的参数
 
 > 说明：HTTP Basic Auth 在浏览器端可能会被缓存，所以你可能不会每次都看到弹窗；使用无痕窗口或更换设备可验证。
 
