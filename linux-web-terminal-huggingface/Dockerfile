@@ -39,6 +39,7 @@ RUN set -eux; \
   /usr/local/bin/ttyd -v
 
 # ---- App files ----
+RUN mkdir -p /home/user/app && chown -R user:user /home/user/app
 WORKDIR /home/user/app
 COPY --chown=user:user start.sh /usr/local/bin/start-ttyd.sh
 RUN chmod +x /usr/local/bin/start-ttyd.sh
