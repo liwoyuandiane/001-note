@@ -1,10 +1,26 @@
+---
+title: JupyterLab
+emoji: 💻
+colorFrom: gray
+colorTo: green
+sdk: docker
+sdk_version: "4.5.3"
+python_version: "3.9"
+pinned: false
+tags:
+  - jupyterlab
+  - python
+  - notebook
+  - datascience
+---
+
 # JupyterLab for Hugging Face Spaces
 
 基于 Ubuntu 22.04 的 JupyterLab Docker 镜像，专为 Hugging Face Spaces 设计。
 
 ## 功能特性
 
-- **JupyterLab 4.x** - 交互式 Python 开发环境
+- **JupyterLab 4.5.3** - 交互式 Python 开发环境（中文界面）
 - **多阶段构建** - 优化镜像体积
 - **GPU 支持** - 预留 CUDA 环境配置
 - **自动生成 Token** - 默认生成 32 位安全随机 token
@@ -24,49 +40,21 @@
 
 ### 1. 基础部署（仅 JupyterLab）
 
-```bash
-docker build -t jupyterlab-space .
-docker run -p 7860:7860 jupyterlab-space
-```
+Space 会自动构建并部署。
 
 ### 2. 自定义 Token
 
-```bash
-docker run -e JUPYTER_TOKEN=my_secret_token -p 7860:7860 jupyterlab-space
-```
+在 **Settings → Variables and secrets** 中添加：
+- `JUPYTER_TOKEN` - 自定义访问 token（可选）
 
 ### 3. 自定义工作目录
 
-```bash
-docker run -e HOME=/data -p 7860:7860 jupyterlab-space
-```
+在 **Settings → Variables and secrets** 中添加：
+- `HOME` - 工作目录（可选）
 
 ### 4. 启动后执行脚本
 
-```bash
-docker run -e URL_SH="https://example.com/setup.sh" -p 7860:7860 jupyterlab-space
-```
-
-### 5. 带参数执行脚本
-
-```bash
-docker run -e URL_SH="https://example.com/setup.sh" -e SCRIPT_ARGS="--install-deps" -p 7860:7860 jupyterlab-space
-```
-
-## Hugging Face Spaces 配置
-
-### 在 Spaces 中使用
-
-1. 创建新的 Space，选择 **Docker** 类型
-2. 复制本仓库文件到你的 Space 仓库
-3. Space 会自动构建并部署
-
-### 设置环境变量
-
-在 Hugging Face Spaces 的 **Settings → Variables and secrets** 中添加：
-
-- `JUPYTER_TOKEN` - 自定义访问 token（可选）
-- `HOME` - 工作目录（可选）
+在 **Settings → Variables and secrets** 中添加：
 - `URL_SH` - 启动脚本 URL（可选）
 - `SCRIPT_ARGS` - 脚本参数（可选）
 
@@ -78,7 +66,7 @@ docker run -e URL_SH="https://example.com/setup.sh" -e SCRIPT_ARGS="--install-de
 ├── login.html           # 自定义登录页面
 ├── requirements.txt     # Python 依赖
 ├── .dockerignore        # Docker 构建忽略文件
-└── README.md            # 中文文档
+└── README.md            # 项目文档
 ```
 
 ## 镜像规格
@@ -102,35 +90,16 @@ docker run -e URL_SH="https://example.com/setup.sh" -e SCRIPT_ARGS="--install-de
 
 ### 容器无法启动
 
-```bash
-# 检查日志
-docker logs <container_id>
-```
-
-### 端口占用
-
-修改默认端口：
-```bash
-docker run -p <your_port>:7860 jupyterlab-space
-```
+在 Space 页面查看 **Logs**。
 
 ### Token 忘记
 
-设置新 token：
-```bash
-docker run -e JUPYTER_TOKEN=new_token -p 7860:7860 jupyterlab-space
-```
-
-## 构建命令
-
-```bash
-# 本地构建
-docker build -t jupyterlab-space .
-
-# 构建多平台镜像
-docker buildx build --platform linux/amd64,linux/arm64 -t jupyterlab-space .
-```
+重新设置环境变量 `JUPYTER_TOKEN`。
 
 ## License
 
 MIT License
+
+---
+
+参考: [Hugging Face Spaces 配置文档](https://huggingface.co/docs/hub/spaces-config-reference)
