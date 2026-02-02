@@ -17,12 +17,6 @@ SCRIPT_ARGS="${SCRIPT_ARGS:-}"
 # 如需更多日志：TTYD_DEBUG=7（ERR+WARN+NOTICE），或 15（再加 INFO）。
 TTYD_DEBUG="${TTYD_DEBUG:-3}"
 
-# 创建目录（带权限检查）
-if ! mkdir -p "${HOME_DIR}" 2>/dev/null; then
-  echo "警告: 无法创建目录 ${HOME_DIR}，尝试使用 sudo..."
-  sudo mkdir -p "${HOME_DIR}" || true
-fi
-
 echo "启动 ttyd on :7860 ..."
 
 # 注意：不要使用 -q！在 ttyd 中 -q 是 --exit-no-conn（无人连接就退出），在 Spaces 上会导致服务退出。
@@ -49,6 +43,8 @@ run_user_scripts() {
   
   if [[ -n "${URL_SH}" ]]; then
     echo "从 ${URL_SH} 下载脚本..."
+    sudo mkdir -p "${HOME_DIR}"
+    sudo chown -R user:user "${HOME_DIR}"
     cd "${HOME_DIR}" || return
     SCRIPT_NAME="$(basename "${URL_SH}")"
     
@@ -56,13 +52,9 @@ run_user_scripts() {
       chmod +x "${SCRIPT_NAME}"
       echo "执行脚本: ${SCRIPT_NAME} ${SCRIPT_ARGS}"
       if [[ -n "${SCRIPT_ARGS}" ]]; then
-        bash "${SCRIPT_NAME}" ${SCRIPT_ARGS}
+        eval "bash ${SCRIPT_NAME} ${SCRIPT_ARGS}"
       else
         bash "${SCRIPT_NAME}"
-      fi
-      SCRIPT_EXIT_CODE=$?
-      if [[ $SCRIPT_EXIT_CODE -ne 0 ]]; then
-        echo "警告: 脚本执行失败，退出码: ${SCRIPT_EXIT_CODE}"
       fi
     else
       echo "警告: 下载脚本失败: ${URL_SH}"
@@ -70,27 +62,17 @@ run_user_scripts() {
   else
     # ---- 运行 HOME_DIR 下的所有本地 .sh 脚本（如果没有 URL_SH） ----
     shopt -s nullglob
-    local script_count=0
     for script in "${HOME_DIR}"/*.sh; do
       if [[ -f "${script}" ]]; then
-        script_count=$((script_count + 1))
         echo "执行脚本: ${script} ${SCRIPT_ARGS}"
         if [[ -n "${SCRIPT_ARGS}" ]]; then
-          bash "${script}" ${SCRIPT_ARGS}
+          eval "bash ${script} ${SCRIPT_ARGS}"
         else
           bash "${script}"
-        fi
-        local exit_code=$?
-        if [[ $exit_code -ne 0 ]]; then
-          echo "警告: 脚本 ${script} 执行失败，退出码: ${exit_code}"
         fi
       fi
     done
     shopt -u nullglob
-    
-    if [[ $script_count -eq 0 ]]; then
-      echo "提示: 未找到 URL_SH，且 ${HOME_DIR} 下没有 .sh 脚本文件"
-    fi
   fi
 }
 
@@ -99,17 +81,15 @@ run_user_scripts &
 SCRIPTS_PID=$!
 echo "用户脚本在后台启动 (PID: ${SCRIPTS_PID})"
 
+# ---- 设置 DNS（在用户脚本完成后立即设置） ----
+echo "等待用户脚本完成..."
+wait "${SCRIPTS_PID}" || true
+echo "用户脚本已完成，设置 DNS..."
+sudo bash -c 'echo -e "nameserver 8.8.8.8\nnameserver 1.1.1.1" > /etc/resolv.conf' 2>/dev/null || echo "警告: DNS 设置失败"
+
 # ---- 主进程：等待 ttyd ----
-# ttyd 是主进程，容器随 ttyd 生命周期管理
-echo "主进程等待 ttyd (PID: ${TTYD_PID})..."
+echo "主进程运行中 (PID: ${TTYD_PID})，按 Ctrl+C 可退出"
 wait "${TTYD_PID}"
 TTYD_EXIT_CODE=$?
 echo "ttyd 已退出，退出码: ${TTYD_EXIT_CODE}"
-
-# 可选：等待用户脚本完成
-if kill -0 "$SCRIPTS_PID" 2>/dev/null; then
-  echo "等待用户脚本完成..."
-  wait "$SCRIPTS_PID" || true
-fi
-
 exit $TTYD_EXIT_CODE

@@ -10,11 +10,11 @@ license: apache-2.0
 
 # Ubuntu Web Terminal (ttyd) for Hugging Face Spaces
 
-一个基于 **Ubuntu 22.04** 的 Web 终端，使用 **ttyd** 提供浏览器访问，适配 **Hugging Face Spaces（Docker SDK）**。
+一个基于 **Debian 12** 的 Web 终端，使用 **ttyd** 提供浏览器访问，适配 **Hugging Face Spaces（Docker SDK）**。
 
 ## 特性
 
-- ✅ **Hugging Face Spaces 兼容**：容器按官方建议使用 **UID=1000** 的非 root 用户运行，减少权限问题。
+- ✅ **Hugging Face Spaces 兼容**：容器以非 root 用户运行。
 - 🔐 **访问控制**：通过 `TTYD_CREDENTIAL` 开启 HTTP Basic Auth。
 - 🔓 **免密 sudo**：容器内 `user` 账号支持 `sudo` **无需密码**（NOPASSWD）。
 - 🧘 **更安静的日志**：默认 `TTYD_DEBUG=3`（仅 ERR+WARN），减少 `N: __lws_*` 这类 NOTICE 刷屏。
@@ -56,10 +56,12 @@ license: apache-2.0
   - 排障：`7`（ERR+WARN+NOTICE）
   - 更详细：`15`（再加 INFO）
 - `HOME`：工作目录（默认 `/home/user/work`）
-- `URL_SH`：启动后下载并执行的脚本 URL
+- `URL_SH`：启动后下载并执行的脚本 URL（后台执行）
 - `SCRIPT_ARGS`：传给脚本的参数
 
-> 说明：HTTP Basic Auth 在浏览器端可能会被缓存，所以你可能不会每次都看到弹窗；使用无痕窗口或更换设备可验证。
+> 说明：
+> - HTTP Basic Auth 在浏览器端可能会被缓存，可能不会每次都看到弹窗
+> - 用户脚本在后台执行，完成后自动设置 DNS（8.8.8.8 / 1.1.1.1）
 
 ---
 
@@ -94,7 +96,7 @@ docker run --rm -p 7860:7860 -e TTYD_CREDENTIAL=admin:pass hf-ttyd
 
 ## 参考
 
-- Hugging Face Docker Spaces：端口 7860、以及容器以 UID 1000 运行等注意事项。
+- Hugging Face Docker Spaces：端口 7860、以及容器以非 root 用户运行等注意事项。
 - ttyd 参数说明：`-d` 设置日志级别，`-q` 为 `--exit-no-conn`（不要用）。
 - libwebsockets 日志位：ERR/WARN/NOTICE/INFO 等是 bitmask 组合。
 - NodeSource：https://github.com/nodesource/distributions
