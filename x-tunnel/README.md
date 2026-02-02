@@ -135,17 +135,17 @@ nano .env
 
 | 主域名 | SSH 域名 |
 |--------|----------|
-| `x-tunnel-1.jiedian.de5.net` | `x-tunnel-1-ssh.jiedian.de5.net` |
-| `aaa.xxx.com` | `aaa-ssh.xxx.com` |
+| `tunnel.example.com` | `tunnel-ssh.example.com` |
+| `aaa.example.com` | `aaa-ssh.example.com` |
 
 ### 连接示例
 
 ```bash
 # SSH 连接（使用生成的 SSH 域名）
-ssh root@x-tunnel-1-ssh.jiedian.de5.net -p 443
+ssh root@tunnel-ssh.example.com -p 443
 
 # 或通过 Cloudflare Argo Tunnel 的 argo 执行
-cloudflared access ssh --hostname x-tunnel-1-ssh.jiedian.de5.net
+cloudflared access ssh --hostname tunnel-ssh.example.com
 ```
 
 > **注意**：SSH 隧道使用 TCP 协议，通过 cloudflared 转发 22 端口流量。
@@ -196,12 +196,12 @@ cloudflared access ssh --hostname x-tunnel-1-ssh.jiedian.de5.net
 
 ```bash
 tunnel_id=xxx       # Cloudflare Tunnel ID
-hostname=x-tunnel-1.jiedian.de5.net    # 主域名
+hostname=tunnel.example.com    # 主域名
 dns_record_id=xxx   # 主域名 DNS 记录 ID
-ssh_hostname=x-tunnel-1-ssh.jiedian.de5.net  # SSH 专用域名
+ssh_hostname=tunnel-ssh.example.com  # SSH 专用域名
 ssh_dns_record_id=xxx    # SSH 域名 DNS 记录 ID
 xt_port=xxxxx      # x-tunnel 监听端口
-tunnel_name=x-tunnel-1   # Tunnel 名称
+tunnel_name=tunnel   # Tunnel 名称
 zone_id=xxx        # Cloudflare Zone ID
 account_id=xxx     # Cloudflare Account ID
 ```
