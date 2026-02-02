@@ -1,10 +1,11 @@
 ---
-title: Ubuntu Web Terminal (ttyd)
-emoji: 🖥️
-colorFrom: blue
-colorTo: gray
+title: Ubuntu Web Terminal
+emoji: 🌍
+colorFrom: gray
+colorTo: red
 sdk: docker
-app_port: 7860
+pinned: false
+license: apache-2.0
 ---
 
 # Ubuntu Web Terminal (ttyd) for Hugging Face Spaces
@@ -17,7 +18,9 @@ app_port: 7860
 - 🔐 **访问控制**：通过 `TTYD_CREDENTIAL` 开启 HTTP Basic Auth。
 - 🔓 **免密 sudo**：容器内 `user` 账号支持 `sudo` **无需密码**（NOPASSWD）。
 - 🧘 **更安静的日志**：默认 `TTYD_DEBUG=3`（仅 ERR+WARN），减少 `N: __lws_*` 这类 NOTICE 刷屏。
-- 🧰 常用工具：vim / nano / git / htop / ping / net-tools / tree 等。
+- 🧰 常用工具：vim / nano / git / htop / ping / net-tools / tree / openssh-server 等。
+- 📦 **Node.js**：自动安装最新版 Node.js（支持 x64/arm64 等架构）。
+- 🔑 **SSH 支持**：支持 SSH 密钥登录（公钥从 URL 下载）。
 
 > ⚠️ 安全提醒：免密 sudo + Web 终端意味着一旦凭据泄露，攻击者可能获得容器内 root 权限。请使用强密码并定期更换。
 
@@ -70,6 +73,12 @@ sudo -i
 sudo apt-get update
 ```
 
+- SSH 登录（需要通过隧道转发 22 端口）：
+
+```bash
+ssh -i /path/to/private_key user@隧道域名
+```
+
 ---
 
 ## 本地运行（可选）
@@ -88,6 +97,7 @@ docker run --rm -p 7860:7860 -e TTYD_CREDENTIAL=admin:pass hf-ttyd
 - Hugging Face Docker Spaces：端口 7860、以及容器以 UID 1000 运行等注意事项。
 - ttyd 参数说明：`-d` 设置日志级别，`-q` 为 `--exit-no-conn`（不要用）。
 - libwebsockets 日志位：ERR/WARN/NOTICE/INFO 等是 bitmask 组合。
+- NodeSource：https://github.com/nodesource/distributions
 
 ---
 

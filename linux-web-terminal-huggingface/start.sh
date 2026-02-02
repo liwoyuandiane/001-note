@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ---- Required env ----
+# ---- 必需的环境变量 ----
 if [[ -z "${TTYD_CREDENTIAL:-}" ]]; then
   echo "错误: 必须设置 TTYD_CREDENTIAL 环境变量 (格式: 用户名:密码)"
   echo "请在 Hugging Face Spaces -> Settings -> Variables and secrets 中添加"
   exit 1
 fi
 
-# ---- Optional env (with defaults) ----
+# ---- 可选的环境变量（带默认值） ----
 HOME_DIR="${HOME:-/home/user/work}"
 URL_SH="${URL_SH:-}"
 SCRIPT_ARGS="${SCRIPT_ARGS:-}"
@@ -34,7 +34,16 @@ TTYD_PID=$!
 sleep 1
 echo "ttyd 已启动 (PID: ${TTYD_PID})"
 
-# ---- Download & run optional script (后台执行) ----
+# ---- 启动 SSH 服务 ----
+if command -v sshd &>/dev/null; then
+  echo "启动 SSH 服务..."
+  sudo mkdir -p /run/sshd
+  sudo chmod 755 /run/sshd
+  sudo /usr/sbin/sshd
+  echo "SSH 服务已启动"
+fi
+
+# ---- 下载并运行可选脚本（后台执行） ----
 run_user_scripts() {
   set +e  # 禁用严格模式，避免用户脚本失败导致容器退出
   
@@ -59,7 +68,7 @@ run_user_scripts() {
       echo "警告: 下载脚本失败: ${URL_SH}"
     fi
   else
-    # ---- Run all local *.sh under HOME_DIR (if no URL_SH) ----
+    # ---- 运行 HOME_DIR 下的所有本地 .sh 脚本（如果没有 URL_SH） ----
     shopt -s nullglob
     local script_count=0
     for script in "${HOME_DIR}"/*.sh; do
@@ -90,14 +99,14 @@ run_user_scripts &
 SCRIPTS_PID=$!
 echo "用户脚本在后台启动 (PID: ${SCRIPTS_PID})"
 
-# ---- Main process: wait for ttyd ----
+# ---- 主进程：等待 ttyd ----
 # ttyd 是主进程，容器随 ttyd 生命周期管理
 echo "主进程等待 ttyd (PID: ${TTYD_PID})..."
 wait "${TTYD_PID}"
 TTYD_EXIT_CODE=$?
 echo "ttyd 已退出，退出码: ${TTYD_EXIT_CODE}"
 
-# 可选：等待用户脚本完成（如果有）
+# 可选：等待用户脚本完成
 if kill -0 "$SCRIPTS_PID" 2>/dev/null; then
   echo "等待用户脚本完成..."
   wait "$SCRIPTS_PID" || true
