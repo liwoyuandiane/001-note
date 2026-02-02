@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-OPENCODE_DIR="$HOME/.opencode"
+OPENCODE_DIR="/root/.opencode"
 OPENCODE_PID_FILE="$OPENCODE_DIR/opencode.pid"
 CLOUDFLARED_PID_FILE="$OPENCODE_DIR/cloudflared.pid"
 OPENCODE_LOG_FILE="$OPENCODE_DIR/opencode.log"
@@ -120,14 +120,21 @@ install_opencode() {
         echo "OpenCode installed at $(date)" >> "$OPENCODE_LOG_FILE"
         
         # 重新加载 PATH（包含新的安装路径）
-        export PATH="$HOME/.opencode/bin:$HOME/.local/bin:/usr/local/bin:$PATH"
+        export PATH="/root/.opencode/bin:/root/.local/bin:/usr/local/bin:$PATH"
         hash -r 2>/dev/null || true
         
         # 直接检查文件是否存在（此时 find_opencode_bin 还未定义）
-        if [ -f "$HOME/.opencode/bin/opencode" ] || [ -f "$HOME/.local/bin/opencode" ] || [ -f "/usr/local/bin/opencode" ] || command -v opencode &> /dev/null; then
-            log_success "OpenCode 安装成功"
+        if [ -f "/root/.opencode/bin/opencode" ]; then
+            log_success "OpenCode 安装成功 (/root/.opencode/bin/opencode)"
+        elif [ -f "/root/.local/bin/opencode" ]; then
+            log_success "OpenCode 安装成功 (/root/.local/bin/opencode)"
+        elif [ -f "/usr/local/bin/opencode" ]; then
+            log_success "OpenCode 安装成功 (/usr/local/bin/opencode)"
+        elif command -v opencode &> /dev/null; then
+            log_success "OpenCode 安装成功 ($(command -v opencode))"
         else
-            log_error "OpenCode 安装失败，请手动安装"
+            log_error "OpenCode 安装失败，未找到可执行文件"
+            log_info "搜索路径: /root/.opencode/bin/opencode, /root/.local/bin/opencode, /usr/local/bin/opencode"
             log_info "访问 https://opencode.ai 获取安装帮助"
             return 1
         fi
@@ -169,10 +176,10 @@ download_cloudflared() {
 find_opencode_bin() {
     if command -v opencode &> /dev/null; then
         echo "opencode"
-    elif [ -f "$HOME/.opencode/bin/opencode" ]; then
-        echo "$HOME/.opencode/bin/opencode"
-    elif [ -f "$HOME/.local/bin/opencode" ]; then
-        echo "$HOME/.local/bin/opencode"
+    elif [ -f "/root/.opencode/bin/opencode" ]; then
+        echo "/root/.opencode/bin/opencode"
+    elif [ -f "/root/.local/bin/opencode" ]; then
+        echo "/root/.local/bin/opencode"
     elif [ -f "/usr/local/bin/opencode" ]; then
         echo "/usr/local/bin/opencode"
     else
@@ -218,7 +225,7 @@ start_services() {
     log_info "开始安装和启动服务..."
     echo ""
 
-    export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+    export PATH="$HOME/.opencode/bin:$HOME/.local/bin:/usr/local/bin:$PATH"
 
     # 认证配置
     if [ -n "$OPENCODE_USER" ]; then

@@ -80,12 +80,12 @@ bash ./opencode.sh interactive'
   ss -ltnp 2>/dev/null | grep -E ":56780"
   ```
 - [ ] **依赖工具**：确保已安装 curl 和 wget
-- [ ] **写入权限**：确保 `~/.opencode` 目录可写
+- [ ] **写入权限**：确保 `/root/.opencode` 目录可写（脚本默认使用 /root 目录）
 - [ ] **安全性**：避免在命令行暴露明文密码，优先使用环境变量
 
 ## 日志与文件
 
-所有文件保存在 `~/.opencode/` 目录：
+所有文件保存在 `/root/.opencode/` 目录：
 
 | 文件 | 说明 |
 |------|------|
@@ -94,6 +94,7 @@ bash ./opencode.sh interactive'
 | `opencode.pid` | OpenCode 进程 ID（自动清理残留） |
 | `cloudflared.pid` | Cloudflared 进程 ID（自动清理残留） |
 | `cloudflared` | Cloudflared 可执行文件 |
+| `bin/opencode` | OpenCode 可执行文件 |
 
 ## 获取 Cloudflare Tunnel 密钥
 
@@ -136,7 +137,7 @@ cloudflared tunnel --url http://127.0.0.1:56780
 ### Q: 安装失败怎么办？
 - 检查网络连接
 - 验证 Cloudflare Token 是否正确
-- 查看日志：`tail -f ~/.opencode/opencode.log`
+- 查看日志：`tail -f /root/.opencode/opencode.log`
 
 ### Q: 端口被占用？
 - 使用 `-p` 指定其他端口
@@ -144,7 +145,7 @@ cloudflared tunnel --url http://127.0.0.1:56780
 
 ### Q: Cloudflared 下载失败？
 - 手动下载对应架构版本：[cloudflared releases](https://github.com/cloudflare/cloudflared/releases)
-- 放置到 `~/.opencode/cloudflared` 并赋予执行权限
+- 放置到 `/root/.opencode/cloudflared` 并赋予执行权限
 
 ### Q: 如何接入自定义前端？
 - 启动时添加 `-c` 参数允许跨域
