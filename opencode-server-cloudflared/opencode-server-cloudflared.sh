@@ -119,12 +119,12 @@ install_opencode() {
         # 安装完成后记录到日志
         echo "OpenCode installed at $(date)" >> "$OPENCODE_LOG_FILE"
         
-        # 重新加载 PATH
-        export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+        # 重新加载 PATH（包含新的安装路径）
+        export PATH="$HOME/.opencode/bin:$HOME/.local/bin:/usr/local/bin:$PATH"
         hash -r 2>/dev/null || true
         
         # 直接检查文件是否存在（此时 find_opencode_bin 还未定义）
-        if [ -f "$HOME/.local/bin/opencode" ] || [ -f "/usr/local/bin/opencode" ] || command -v opencode &> /dev/null; then
+        if [ -f "$HOME/.opencode/bin/opencode" ] || [ -f "$HOME/.local/bin/opencode" ] || [ -f "/usr/local/bin/opencode" ] || command -v opencode &> /dev/null; then
             log_success "OpenCode 安装成功"
         else
             log_error "OpenCode 安装失败，请手动安装"
@@ -169,6 +169,8 @@ download_cloudflared() {
 find_opencode_bin() {
     if command -v opencode &> /dev/null; then
         echo "opencode"
+    elif [ -f "$HOME/.opencode/bin/opencode" ]; then
+        echo "$HOME/.opencode/bin/opencode"
     elif [ -f "$HOME/.local/bin/opencode" ]; then
         echo "$HOME/.local/bin/opencode"
     elif [ -f "/usr/local/bin/opencode" ]; then
