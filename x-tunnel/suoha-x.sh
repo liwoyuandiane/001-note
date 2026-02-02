@@ -377,10 +377,31 @@ create_cloudflare_tunnel() {
   echo "$ttoken"
 }
 
+gen_ssh_hostname() {
+  local hostname="$1"
+  local prefix="${hostname%%.*}"
+  local suffix="${hostname#$prefix.}"
+  echo "${prefix}-ssh.${suffix}"
+}
+
 update_tunnel_config() {
-  local account_id="$1" tunnel_id="$2" hostname="$3" xt_port="$4"
+  local account_id="$1" tunnel_id="$2" hostname="$3" xt_port="$4" ssh_hostname="${5:-}"
   local cfg resp success
-  cfg=$(cat <<EOF
+  if [ -n "$ssh_hostname" ]; then
+    cfg=$(cat <<EOF
+{
+  "config": {
+    "ingress": [
+      {"hostname": "$hostname", "service": "http://127.0.0.1:$xt_port", "originRequest": {"noTLSVerify": true}},
+      {"hostname": "$ssh_hostname", "service": "tcp://127.0.0.1:22"},
+      {"service": "http_status:404"}
+    ]
+  }
+}
+EOF
+    )
+  else
+    cfg=$(cat <<EOF
 {
   "config": {
     "ingress": [
@@ -390,7 +411,8 @@ update_tunnel_config() {
   }
 }
 EOF
-)
+    )
+  fi
   resp=$(cf_api PUT "$(cf_tunnel_base "$account_id")/$tunnel_id/configurations" "$cfg")
   success=$(json_get "$resp" '.success // empty' '"success":(true|false)')
   [ "$success" = "true" ]
@@ -437,7 +459,7 @@ create_dns_record() {
 }
 
 save_tunnel_info() {
-  local tunnel_id="$1" hostname="$2" dns_record_id="$3" xt_port="$4" tunnel_name="$5" zone_id="$6" account_id="$7"
+  local tunnel_id="$1" hostname="$2" dns_record_id="$3" xt_port="$4" tunnel_name="$5" zone_id="$6" account_id="$7" ssh_hostname="${8:-}" ssh_dns_record_id="${9:-}"
   cat > .tunnel_info <<EOF
 # auto-generated
 tunnel_id=$tunnel_id
@@ -447,6 +469,8 @@ xt_port=$xt_port
 tunnel_name=$tunnel_name
 zone_id=$zone_id
 account_id=$account_id
+ssh_hostname=$ssh_hostname
+ssh_dns_record_id=$ssh_dns_record_id
 EOF
 }
 
@@ -540,20 +564,30 @@ api_mode() {
   [ -z "$xt_port" ] && { print_error "无法探测 x-tunnel 监听端口"; exit 1; }
   print_success "x-tunnel 已启动（PID: $xt_pid，端口: $xt_port）"
 
-  # 写入远端 ingress
-  if update_tunnel_config "$ACCOUNT_ID" "$TUNNEL_ID" "$cf_domain" "$xt_port"; then
-    print_success "远端 ingress 已更新（service -> 127.0.0.1:$xt_port）"
+  # 生成 SSH 主机名
+  local SSH_HOSTNAME
+  SSH_HOSTNAME=$(gen_ssh_hostname "$cf_domain")
+  print_info "SSH 主机名: $SSH_HOSTNAME"
+
+  # 写入远端 ingress（包含 SSH）
+  if update_tunnel_config "$ACCOUNT_ID" "$TUNNEL_ID" "$cf_domain" "$xt_port" "$SSH_HOSTNAME"; then
+    print_success "远端 ingress 已更新（HTTP -> 127.0.0.1:$xt_port, SSH -> 127.0.0.1:22）"
   else
     print_warning "远端 ingress 更新失败（可能导致 503）"
   fi
 
-  # DNS：先删再建
-  local DNS_RECORD_ID
+  # DNS：先删再建（主域名）
+  local DNS_RECORD_ID SSH_DNS_RECORD_ID
   DNS_RECORD_ID=$(check_dns_record "$ZONE_ID" "$cf_domain" || true)
   [ -n "$DNS_RECORD_ID" ] && delete_dns_record "$ZONE_ID" "$DNS_RECORD_ID" || true
   DNS_RECORD_ID=$(create_dns_record "$ZONE_ID" "$cf_domain" "$TUNNEL_ID" || true)
 
-  save_tunnel_info "$TUNNEL_ID" "$cf_domain" "$DNS_RECORD_ID" "$xt_port" "$cf_tunnel_name" "$ZONE_ID" "$ACCOUNT_ID"
+  # DNS：SSH 记录
+  SSH_DNS_RECORD_ID=$(check_dns_record "$ZONE_ID" "$SSH_HOSTNAME" || true)
+  [ -n "$SSH_DNS_RECORD_ID" ] && delete_dns_record "$ZONE_ID" "$SSH_DNS_RECORD_ID" || true
+  SSH_DNS_RECORD_ID=$(create_dns_record "$ZONE_ID" "$SSH_HOSTNAME" "$TUNNEL_ID" || true)
+
+  save_tunnel_info "$TUNNEL_ID" "$cf_domain" "$DNS_RECORD_ID" "$xt_port" "$cf_tunnel_name" "$ZONE_ID" "$ACCOUNT_ID" "$SSH_HOSTNAME" "$SSH_DNS_RECORD_ID"
 
   # 最后启动 cloudflared
   ./cloudflared-linux update >/dev/null 2>&1 || true
@@ -564,7 +598,8 @@ api_mode() {
   print_success "API 隧道创建/启动完成"
   echo "========================================"
   echo "模式: API（固定隧道）"
-  echo "域名: $cf_domain"
+  echo "主域名: $cf_domain"
+  echo "SSH 域名: $SSH_HOSTNAME"
   echo "Tunnel: $cf_tunnel_name"
   echo "Tunnel ID: $TUNNEL_ID"
   echo "x-tunnel 端口: $xt_port"
@@ -586,6 +621,7 @@ remove_all() {
       [ -z "$acc" ] && acc=$(get_account_id || true)
 
       [ -n "${dns_record_id:-}" ] && [ -n "${zone_id:-}" ] && delete_dns_record "$zone_id" "$dns_record_id" >/dev/null 2>&1 || true
+      [ -n "${ssh_dns_record_id:-}" ] && [ -n "${zone_id:-}" ] && delete_dns_record "$zone_id" "$ssh_dns_record_id" >/dev/null 2>&1 || true
       [ -n "${tunnel_id:-}" ] && [ -n "$acc" ] && delete_cloudflare_tunnel "$acc" "$tunnel_id" >/dev/null 2>&1 || true
     fi
     rm -f .tunnel_info 2>/dev/null || true
