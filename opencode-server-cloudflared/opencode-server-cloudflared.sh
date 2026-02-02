@@ -31,41 +31,6 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Rotate logs to avoid unlimited growth.
-# Keeps up to 5 historical files: <log>.1 ... <log>.5 (oldest dropped)
-rotate_log() {
-    local file="$1"
-    local max_size_bytes="${2:-5242880}"  # default 5MB
-
-    [ -f "$file" ] || return 0
-
-    local size=""
-    if command -v stat >/dev/null 2>&1; then
-        size=$(stat -c%s "$file" 2>/dev/null || true)
-    fi
-    if [ -z "$size" ]; then
-        size=$(wc -c < "$file" 2>/dev/null || echo 0)
-    fi
-
-    case "$size" in
-        ''|*[!0-9]*) return 0 ;;
-    esac
-
-    if [ "$size" -lt "$max_size_bytes" ]; then
-        return 0
-    fi
-
-    rm -f "${file}.5" 2>/dev/null || true
-    for i in 4 3 2 1; do
-        if [ -f "${file}.${i}" ]; then
-            mv -f "${file}.${i}" "${file}.$((i+1))" 2>/dev/null || true
-        fi
-    done
-    mv -f "$file" "${file}.1" 2>/dev/null || true
-    : > "$file" 2>/dev/null || true
-}
-
-
 print_help() {
     # Resolve a stable script invocation path for display
     local script_path
@@ -83,7 +48,6 @@ print_help() {
     echo ""
     echo "Commands:"
     echo "  install                   安装并启动服务"
-    echo "  interactive               交互式部署（输入端口/用户名/密码/Token）"
     echo "  status                    查看服务状态"
     echo "  stop                      停止服务"
     echo "  restart                   重启服务"
@@ -92,8 +56,9 @@ print_help() {
     echo "Options:"
     echo "  -p, --port <port>         OpenCode 服务端口 (默认: 56780)"
     echo "  -u, --user <username>     登录用户名 (默认: opencode)"
-    echo "  -P, --password <password> 登录密码 (可选)"
+    echo "  -P, --password <password> 登录密码 (必须，公网访问必需)"
     echo "  -t, --token <token>       Cloudflare Tunnel 密钥"
+    echo "  -c, --cors <origin>       允许的跨域来源 (可选，可多次使用)"
     echo ""
     echo "Examples:"
     echo "  ${script_path} install -t eyJh..."
@@ -144,34 +109,30 @@ install_opencode() {
     mkdir -p "$OPENCODE_DIR" 2>/dev/null || true
     log_info "安装 OpenCode..."
 
-    # Ensure PATH covers typical install locations for non-interactive shells
-    export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$HOME/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
-
-    # If already available, skip install
-    if [ -n "$(find_opencode_bin)" ]; then
+    if command -v opencode &> /dev/null; then
         log_success "OpenCode 已安装"
-        return 0
+    else
+        # 先实时安装（不通过管道，保持 TTY 以显示进度条）
+        log_info "正在下载并安装 OpenCode，请稍候..."
+        curl -fsSL https://opencode.ai/install | bash
+        
+        # 安装完成后记录到日志
+        echo "OpenCode installed at $(date)" >> "$OPENCODE_LOG_FILE"
+        
+        # 重新加载 PATH
+        export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+        hash -r 2>/dev/null || true
+        
+        # 直接检查文件是否存在（此时 find_opencode_bin 还未定义）
+        if [ -f "$HOME/.local/bin/opencode" ] || [ -f "/usr/local/bin/opencode" ] || command -v opencode &> /dev/null; then
+            log_success "OpenCode 安装成功"
+        else
+            log_error "OpenCode 安装失败，请手动安装"
+            log_info "访问 https://opencode.ai 获取安装帮助"
+            return 1
+        fi
     fi
-
-    # Run official installer
-    curl -fsSL https://opencode.ai/install | bash 2>&1 | tee -a "$OPENCODE_LOG_FILE"
-
-    # Re-check after install
-    export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$HOME/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
-
-    local bin_path
-    bin_path="$(find_opencode_bin)"
-    if [ -n "$bin_path" ]; then
-        log_success "OpenCode 安装成功（$bin_path）"
-        return 0
-    fi
-
-    log_error "OpenCode 安装失败：未找到可执行文件（可能是 PATH 未生效或安装目录不同）"
-    log_info "你可以手动验证：ls -la $HOME/.local/bin/opencode $HOME/.opencode/bin/opencode 2>/dev/null"
-    log_info "或手动指定安装目录：OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash"
-    return 1
 }
-
 
 download_cloudflared() {
     log_info "下载 Cloudflared..."
@@ -206,46 +167,23 @@ download_cloudflared() {
 }
 
 find_opencode_bin() {
-    if command -v opencode &>/dev/null; then
+    if command -v opencode &> /dev/null; then
         echo "opencode"
-        return 0
+    elif [ -f "$HOME/.local/bin/opencode" ]; then
+        echo "$HOME/.local/bin/opencode"
+    elif [ -f "/usr/local/bin/opencode" ]; then
+        echo "/usr/local/bin/opencode"
+    else
+        echo ""
     fi
-
-    # Common install locations (installer may use XDG or fallback dirs)
-    local candidates=(
-        "$HOME/.local/bin/opencode"
-        "$HOME/.opencode/bin/opencode"
-        "$HOME/bin/opencode"
-        "/usr/local/bin/opencode"
-        "/usr/bin/opencode"
-    )
-
-    for f in "${candidates[@]}"; do
-        if [ -x "$f" ]; then
-            echo "$f"
-            return 0
-        fi
-    done
-
-    echo ""
 }
-
 
 start_services() {
     OPENCODE_PORT="${1:-56780}"
     OPENCODE_USER="${2:-opencode}"
     OPENCODE_PASSWORD="$3"
     CLOUDFLARED_TOKEN="$4"
-
-
-    # Ensure we clean up partially-started services on failure
-    _cleanup_on_error() {
-        local rc=$?
-        log_error "安装/启动过程中发生错误，正在回滚（停止已启动的进程）..."
-        stop_services || true
-        exit $rc
-    }
-    trap _cleanup_on_error ERR INT TERM
+    CORS_ORIGINS="$5"
 
     # 端口占用检测：若端口已被占用，直接退出安装流程并给出友好提示
     port_in_use=0
@@ -255,7 +193,7 @@ start_services() {
         fi
     fi
     if [ "$port_in_use" -eq 0 ] && command -v netstat >/dev/null 2>&1; then
-        if netstat -tlnp 2>/dev/null | grep -E ":${OPENCODE_PORT}[[:space:]]"; then
+        if netstat -tlnp 2>/dev/null | grep -qE ":${OPENCODE_PORT}[[:space:]]"; then
             port_in_use=1
         fi
     fi
@@ -269,11 +207,18 @@ start_services() {
         exit 1
     fi
 
+    if [ -z "$OPENCODE_PASSWORD" ]; then
+        log_error "必须设置访问密码（使用 -P 或 --password 参数），公网访问不安全！"
+        log_info "参考: https://opencode.ai/docs/web/"
+        exit 1
+    fi
+
     log_info "开始安装和启动服务..."
     echo ""
 
     export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 
+    # 认证配置
     if [ -n "$OPENCODE_USER" ]; then
         export OPENCODE_SERVER_USERNAME="$OPENCODE_USER"
     fi
@@ -281,6 +226,14 @@ start_services() {
     if [ -n "$OPENCODE_PASSWORD" ]; then
         export OPENCODE_SERVER_PASSWORD="$OPENCODE_PASSWORD"
     fi
+
+    # CORS 配置
+    if [ -n "$CORS_ORIGINS" ]; then
+        export OPENCODE_SERVER_CORS="$CORS_ORIGINS"
+    fi
+
+    # 环境变量配置
+    export OPENCODE_CLIENT="web-server"
 
     check_root
     check_dependencies
@@ -293,54 +246,58 @@ start_services() {
         log_error "未找到 OpenCode 可执行文件"
         exit 1
     fi
-    rotate_log "$OPENCODE_LOG_FILE"
-    rotate_log "$CLOUDFLARED_LOG_FILE"
-
 
     log_info "启动 OpenCode 服务 (端口: $OPENCODE_PORT)..."
 
+    # 清理残留 PID 文件（如果进程已不存在）
     if [ -f "$OPENCODE_PID_FILE" ]; then
         OLD_PID=$(cat "$OPENCODE_PID_FILE")
-        if kill -0 "$OLD_PID" 2>/dev/null; then
+        if ! kill -0 "$OLD_PID" 2>/dev/null; then
+            log_warn "发现残留 PID 文件，进程已不存在，清理中..."
+            rm -f "$OPENCODE_PID_FILE"
+        else
+            # 进程还在运行，先停止它
             kill "$OLD_PID" 2>/dev/null || true
             sleep 1
         fi
     fi
 
-    nohup "$OPENCODE_BIN" serve --port "$OPENCODE_PORT" >> "$OPENCODE_LOG_FILE" 2>&1 &
+    # 日志文件大小检查（超过 10MB 则清空）
+    if [ -f "$OPENCODE_LOG_FILE" ]; then
+        LOG_SIZE=$(stat -f%z "$OPENCODE_LOG_FILE" 2>/dev/null || stat -c%s "$OPENCODE_LOG_FILE" 2>/dev/null || echo 0)
+        if [ "$LOG_SIZE" -gt 10485760 ]; then
+            log_warn "OpenCode 日志文件超过 10MB，已清空"
+            > "$OPENCODE_LOG_FILE"
+        fi
+    fi
+
+    # Cloudflared 日志同样处理
+    if [ -f "$CLOUDFLARED_LOG_FILE" ]; then
+        LOG_SIZE=$(stat -f%z "$CLOUDFLARED_LOG_FILE" 2>/dev/null || stat -c%s "$CLOUDFLARED_LOG_FILE" 2>/dev/null || echo 0)
+        if [ "$LOG_SIZE" -gt 10485760 ]; then
+            log_warn "Cloudflared 日志文件超过 10MB，已清空"
+            > "$CLOUDFLARED_LOG_FILE"
+        fi
+    fi
+
+    # 构建启动命令数组
+    OPENCODE_ARGS=("$OPENCODE_BIN" serve --port "$OPENCODE_PORT" --hostname 0.0.0.0)
+    
+    # 添加 CORS 参数
+    if [ -n "$CORS_ORIGINS" ]; then
+        # 处理多个 CORS 来源
+        for origin in $CORS_ORIGINS; do
+            OPENCODE_ARGS+=(--cors "$origin")
+        done
+    fi
+    
+    nohup "${OPENCODE_ARGS[@]}" > "$OPENCODE_LOG_FILE" 2>&1 &
     OPENCODE_PID=$!
     echo $OPENCODE_PID > "$OPENCODE_PID_FILE"
 
     sleep 3
     if kill -0 $OPENCODE_PID 2>/dev/null; then
         log_success "OpenCode 已启动 (PID: $OPENCODE_PID)"
-
-    # Health check (OpenCode server)
-    # Endpoint: /global/health
-    log_info "执行健康检查: /global/health"
-    HEALTH_URL="http://127.0.0.1:${OPENCODE_PORT}/global/health"
-    AUTH_ARGS=()
-    if [ -n "$OPENCODE_PASSWORD" ]; then
-        AUTH_ARGS=(-u "${OPENCODE_USER}:${OPENCODE_PASSWORD}")
-    fi
-
-    HEALTH_OK=0
-    if command -v curl >/dev/null 2>&1; then
-        for i in 1 2 3 4 5; do
-            if curl -fsS "${AUTH_ARGS[@]}" "$HEALTH_URL" >/dev/null 2>&1; then
-                HEALTH_OK=1
-                break
-            fi
-            sleep 1
-        done
-    fi
-
-    if [ "$HEALTH_OK" -eq 1 ]; then
-        log_success "健康检查通过"
-    else
-        log_warn "健康检查未通过（可能仍在启动中或认证/网络限制）。你可以稍后手动访问: $HEALTH_URL"
-    fi
-
     else
         log_error "OpenCode 启动失败"
         log_info "查看日志: tail -f $OPENCODE_LOG_FILE"
@@ -349,15 +306,20 @@ start_services() {
 
     log_info "启动 Cloudflare Tunnel..."
 
+    # 清理 Cloudflared 残留 PID 文件
     if [ -f "$CLOUDFLARED_PID_FILE" ]; then
         OLD_PID=$(cat "$CLOUDFLARED_PID_FILE")
-        if kill -0 "$OLD_PID" 2>/dev/null; then
+        if ! kill -0 "$OLD_PID" 2>/dev/null; then
+            log_warn "发现 Cloudflared 残留 PID 文件，进程已不存在，清理中..."
+            rm -f "$CLOUDFLARED_PID_FILE"
+        else
+            # 进程还在运行，先停止它
             kill "$OLD_PID" 2>/dev/null || true
             sleep 1
         fi
     fi
 
-    nohup "$OPENCODE_DIR/cloudflared" tunnel --url "http://localhost:$OPENCODE_PORT" run --token "$CLOUDFLARED_TOKEN" >> "$CLOUDFLARED_LOG_FILE" 2>&1 &
+    nohup "$OPENCODE_DIR/cloudflared" tunnel --url "http://127.0.0.1:$OPENCODE_PORT" run --token "$CLOUDFLARED_TOKEN" > "$CLOUDFLARED_LOG_FILE" 2>&1 &
     CLOUDFLARED_PID=$!
     echo $CLOUDFLARED_PID > "$CLOUDFLARED_PID_FILE"
 
@@ -391,10 +353,6 @@ start_services() {
     echo "  停止服务: bash $0 stop"
     echo "  重启服务: bash $0 restart"
     echo ""
-
-    # Clear trap handlers set during start_services
-    trap - ERR INT TERM
-
 }
 
 interactive_deploy() {
@@ -403,15 +361,20 @@ interactive_deploy() {
     OPENCODE_PORT=${OPENCODE_PORT:-56780}
     read -p "登录用户名 [opencode]: " OPENCODE_USER
     OPENCODE_USER=${OPENCODE_USER:-opencode}
-    read -s -p "登录密码（留空无密码）: " OPENCODE_PASSWORD
+    read -s -p "登录密码 (必须): " OPENCODE_PASSWORD
     echo
-    read -s -p "Cloudflare Tunnel 密钥 (-t): " CLOUDFLARED_TOKEN
-    echo
-    if [ -z "$CLOUDFLARED_TOKEN" ]; then
-        log_error "必须指定 Cloudflare Tunnel 密钥 (-t)；退出"
+    if [ -z "$OPENCODE_PASSWORD" ]; then
+        log_error "必须设置访问密码，公网访问不安全！"
         exit 1
     fi
-    start_services "$OPENCODE_PORT" "$OPENCODE_USER" "$OPENCODE_PASSWORD" "$CLOUDFLARED_TOKEN"
+    read -p "允许的跨域来源 [可选]: " CORS_ORIGINS
+    read -s -p "Cloudflare Tunnel 密钥: " CLOUDFLARED_TOKEN
+    echo
+    if [ -z "$CLOUDFLARED_TOKEN" ]; then
+        log_error "必须指定 Cloudflare Tunnel 密钥；退出"
+        exit 1
+    fi
+    start_services "$OPENCODE_PORT" "$OPENCODE_USER" "$OPENCODE_PASSWORD" "$CLOUDFLARED_TOKEN" "$CORS_ORIGINS"
 }
 
 stop_services() {
@@ -511,12 +474,8 @@ check_status() {
         PUBLIC_URL=$(grep -oE 'https://[^[:space:]]+\.trycloudflare\.com' "$CLOUDFLARED_LOG_FILE" 2>/dev/null | tail -1)
         if [ -n "$PUBLIC_URL" ]; then
             echo -e "${GREEN}$PUBLIC_URL${NC}"
-            echo "(提示：该链接通常来自 Quick Tunnel/临时隧道模式)"
         else
-            echo "未检测到 trycloudflare 临时链接。"
-            echo "(提示：你大概率使用的是 Zero Trust 控制台生成的 Token 隧道模式；公网访问地址通常是你在控制台配置的 Public Hostname/自定义域名。)"
-            echo "请前往 Cloudflare Zero Trust → Networks → Tunnels 查看并绑定 Hostname。"
-            echo "也可以查看 Cloudflared 日志确认连接：tail -f $CLOUDFLARED_LOG_FILE"
+            echo "等待 Cloudflared 生成链接... (可能需要10-30秒)"
         fi
     else
         echo "未找到 Cloudflared 日志"
@@ -541,6 +500,7 @@ main() {
     OPENCODE_USER="opencode"
     OPENCODE_PASSWORD=""
     CLOUDFLARED_TOKEN=""
+    CORS_ORIGINS=""
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -560,6 +520,14 @@ main() {
                 CLOUDFLARED_TOKEN="$2"
                 shift 2
                 ;;
+            -c|--cors)
+                if [ -z "$CORS_ORIGINS" ]; then
+                    CORS_ORIGINS="$2"
+                else
+                    CORS_ORIGINS="$CORS_ORIGINS $2"
+                fi
+                shift 2
+                ;;
             install|status|stop|restart|interactive)
                 COMMAND="$1"
                 shift
@@ -575,7 +543,7 @@ main() {
 
     case "$COMMAND" in
         install)
-            start_services "$OPENCODE_PORT" "$OPENCODE_USER" "$OPENCODE_PASSWORD" "$CLOUDFLARED_TOKEN"
+            start_services "$OPENCODE_PORT" "$OPENCODE_USER" "$OPENCODE_PASSWORD" "$CLOUDFLARED_TOKEN" "$CORS_ORIGINS"
             ;;
         status)
             check_status
@@ -586,7 +554,7 @@ main() {
         restart)
             stop_services
             sleep 2
-            start_services "$OPENCODE_PORT" "$OPENCODE_USER" "$OPENCODE_PASSWORD" "$CLOUDFLARED_TOKEN"
+            start_services "$OPENCODE_PORT" "$OPENCODE_USER" "$OPENCODE_PASSWORD" "$CLOUDFLARED_TOKEN" "$CORS_ORIGINS"
             ;;
         interactive)
             interactive_deploy
