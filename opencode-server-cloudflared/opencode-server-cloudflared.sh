@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-OPENCODE_DIR="/root/.opencode"
+OPENCODE_DIR="$HOME/.opencode"
 OPENCODE_PID_FILE="$OPENCODE_DIR/opencode.pid"
 CLOUDFLARED_PID_FILE="$OPENCODE_DIR/cloudflared.pid"
 OPENCODE_LOG_FILE="$OPENCODE_DIR/opencode.log"
@@ -116,25 +116,28 @@ install_opencode() {
         log_info "正在下载并安装 OpenCode，请稍候..."
         curl -fsSL https://opencode.ai/install | bash
         
-        # 安装完成后记录到日志
-        echo "OpenCode installed at $(date)" >> "$OPENCODE_LOG_FILE"
+        # 确保目录存在并设置权限
+        mkdir -p /root/.opencode 2>/dev/null || true
+        
+        # 安装完成后记录到日志（使用 sudo 或忽略权限错误）
+        echo "OpenCode installed at $(date)" >> "$OPENCODE_LOG_FILE" 2>/dev/null || true
         
         # 重新加载 PATH（包含新的安装路径）
-        export PATH="/root/.opencode/bin:/root/.local/bin:/usr/local/bin:$PATH"
+        export PATH="$HOME/.opencode/bin:$HOME/.local/bin:/usr/local/bin:$PATH"
         hash -r 2>/dev/null || true
         
         # 直接检查文件是否存在（此时 find_opencode_bin 还未定义）
-        if [ -f "/root/.opencode/bin/opencode" ]; then
-            log_success "OpenCode 安装成功 (/root/.opencode/bin/opencode)"
-        elif [ -f "/root/.local/bin/opencode" ]; then
-            log_success "OpenCode 安装成功 (/root/.local/bin/opencode)"
+        if [ -f "$HOME/.opencode/bin/opencode" ]; then
+            log_success "OpenCode 安装成功 ($HOME/.opencode/bin/opencode)"
+        elif [ -f "$HOME/.local/bin/opencode" ]; then
+            log_success "OpenCode 安装成功 ($HOME/.local/bin/opencode)"
         elif [ -f "/usr/local/bin/opencode" ]; then
             log_success "OpenCode 安装成功 (/usr/local/bin/opencode)"
         elif command -v opencode &> /dev/null; then
             log_success "OpenCode 安装成功 ($(command -v opencode))"
         else
             log_error "OpenCode 安装失败，未找到可执行文件"
-            log_info "搜索路径: /root/.opencode/bin/opencode, /root/.local/bin/opencode, /usr/local/bin/opencode"
+            log_info "搜索路径: $HOME/.opencode/bin/opencode, $HOME/.local/bin/opencode, /usr/local/bin/opencode"
             log_info "访问 https://opencode.ai 获取安装帮助"
             return 1
         fi
@@ -176,10 +179,10 @@ download_cloudflared() {
 find_opencode_bin() {
     if command -v opencode &> /dev/null; then
         echo "opencode"
-    elif [ -f "/root/.opencode/bin/opencode" ]; then
-        echo "/root/.opencode/bin/opencode"
-    elif [ -f "/root/.local/bin/opencode" ]; then
-        echo "/root/.local/bin/opencode"
+    elif [ -f "$HOME/.opencode/bin/opencode" ]; then
+        echo "$HOME/.opencode/bin/opencode"
+    elif [ -f "$HOME/.local/bin/opencode" ]; then
+        echo "$HOME/.local/bin/opencode"
     elif [ -f "/usr/local/bin/opencode" ]; then
         echo "/usr/local/bin/opencode"
     else
