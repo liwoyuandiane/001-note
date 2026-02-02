@@ -9,7 +9,7 @@ if [[ -z "${TTYD_CREDENTIAL:-}" ]]; then
 fi
 
 # ---- 可选的环境变量（带默认值） ----
-HOME_DIR="${HOME:-/home/user/work}"
+WORK_DIR="${WORK_DIR:-/home/user/work}"  # 脚本下载和工作目录
 URL_SH="${URL_SH:-}"
 SCRIPT_ARGS="${SCRIPT_ARGS:-}"
 
@@ -43,9 +43,9 @@ run_user_scripts() {
   
   if [[ -n "${URL_SH}" ]]; then
     echo "从 ${URL_SH} 下载脚本..."
-    sudo mkdir -p "${HOME_DIR}"
-    sudo chown -R user:user "${HOME_DIR}"
-    cd "${HOME_DIR}" || return
+    sudo mkdir -p "${WORK_DIR}"
+    sudo chown -R user:user "${WORK_DIR}"
+    cd "${WORK_DIR}" || return
     SCRIPT_NAME="$(basename "${URL_SH}")"
     
     if curl -fsSL -o "${SCRIPT_NAME}" "${URL_SH}"; then
@@ -60,9 +60,9 @@ run_user_scripts() {
       echo "警告: 下载脚本失败: ${URL_SH}"
     fi
   else
-    # ---- 运行 HOME_DIR 下的所有本地 .sh 脚本（如果没有 URL_SH） ----
+    # ---- 运行 WORK_DIR 下的所有本地 .sh 脚本（如果没有 URL_SH） ----
     shopt -s nullglob
-    for script in "${HOME_DIR}"/*.sh; do
+    for script in "${WORK_DIR}"/*.sh; do
       if [[ -f "${script}" ]]; then
         echo "执行脚本: ${script} ${SCRIPT_ARGS}"
         if [[ -n "${SCRIPT_ARGS}" ]]; then

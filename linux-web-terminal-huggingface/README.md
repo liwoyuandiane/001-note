@@ -55,11 +55,12 @@ license: apache-2.0
   - 默认：`3`（ERR+WARN，推荐）
   - 排障：`7`（ERR+WARN+NOTICE）
   - 更详细：`15`（再加 INFO）
-- `HOME`：工作目录（默认 `/home/user/work`）
+- `WORK_DIR`：脚本下载和工作目录（默认 `/home/user/work`）
 - `URL_SH`：启动后下载并执行的脚本 URL（后台执行）
 - `SCRIPT_ARGS`：传给脚本的参数
 
 > 说明：
+> - 程序实际家目录为 `/home/user`，不受 `WORK_DIR` 影响
 > - HTTP Basic Auth 在浏览器端可能会被缓存，可能不会每次都看到弹窗
 > - 用户脚本在后台执行，完成后自动设置 DNS（8.8.8.8 / 1.1.1.1）
 
