@@ -5,7 +5,7 @@
 # - Zone ID 查询：逐个尝试候选域名；支持 -z/--zone 或 cf_zone 强制指定
 # - API 模式：先启动 x-tunnel（端口可随机）→ PID 探测真实监听端口 → 写入远端 ingress → 启动 cloudflared
 # - 远端配置 API 使用正确路径：/accounts/{account_id}/cfd_tunnel/{tunnel_id}/configurations
-# - 隧道同名存在：先删后建（删除后等待5秒，检测是否仍存在，最多重试3次，仍失败则退出）
+# - 隧道同名存在：先删后建（前3次间隔5秒，后2次间隔3分钟，共5次重试，仍失败则退出）
 # - remove：停止服务 + 删除远端(可选) + 删除本地二进制 + 删除日志/轮转/pid + 删除 logrotate 配置
 # - 日志默认在脚本运行目录（pwd）：x-tunnel.log / cloudflared.log / opera.log
 
