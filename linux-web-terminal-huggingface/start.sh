@@ -49,7 +49,6 @@ if command -v sshd &>/dev/null; then
     cd "${WORK_DIR}"
     
     # 下载 cloudflared（带重试）
-    CLOUDFLARED_BIN="${WORK_DIR}/cloudflared"
     ARCH="$(uname -m)"
     case "$ARCH" in
       x86_64) CLOUDFLARED_FILE="cloudflared-linux-amd64" ;;
@@ -58,17 +57,24 @@ if command -v sshd &>/dev/null; then
       *) log "不支持的架构: $ARCH"; exit 1 ;;
     esac
     
+    # 确保目录存在并有写入权限
+    sudo mkdir -p "${WORK_DIR}"
+    sudo chown -R $(whoami):$(whoami) "${WORK_DIR}" 2>/dev/null || sudo chown -R user:user "${WORK_DIR}"
+    cd "${WORK_DIR}"
+    CLOUDFLARED_BIN="${WORK_DIR}/cloudflared-linux"
+    
     if [[ ! -f "${CLOUDFLARED_BIN}" ]]; then
       RETRY_COUNT=0
       MAX_RETRIES=3
       while [[ $RETRY_COUNT -lt $MAX_RETRIES ]]; do
-        if curl -fsSL -o "${CLOUDFLARED_BIN}" "https://github.com/cloudflare/cloudflared/releases/latest/download/${CLOUDFLARED_FILE}"; then
-          chmod +x "${CLOUDFLARED_BIN}"
+        log "下载 cloudflared: ${CLOUDFLARED_FILE}"
+        if curl -fsSL -L -o "cloudflared-linux" "https://github.com/cloudflare/cloudflared/releases/latest/download/${CLOUDFLARED_FILE}"; then
+          chmod +x "cloudflared-linux"
           log "cloudflared 下载成功"
           break
         else
           RETRY_COUNT=$((RETRY_COUNT + 1))
-          log "cloudflared 下载失败，重试 ${RETRY_COUNT}/${MAX_RETRIES}..."
+          log "cloudflared 下载失败 (curl exit: $?)，重试 ${RETRY_COUNT}/${MAX_RETRIES}..."
           sleep 5
         fi
       done
@@ -76,11 +82,14 @@ if command -v sshd &>/dev/null; then
       if [[ ! -f "${CLOUDFLARED_BIN}" ]]; then
         log "错误: cloudflared 下载失败，隧道启动中止"
       fi
+    else
+      log "cloudflared 已存在，跳过下载"
     fi
     
-    # 启动隧道（绑定 SSH 22 端口）
-    if [[ -f "${CLOUDFLARED_BIN}" ]]; then
-      "${CLOUDFLARED_BIN}" tunnel --token="${SSH_TUNNEL_TOKEN}" --url ssh://localhost:22 &
+    # 启动隧道（使用 Token 运行现有 Cloudflare Tunnel）
+    if [[ -f "cloudflared-linux" ]]; then
+      log "启动 Cloudflare 隧道..."
+      ./cloudflared-linux tunnel run --token="${SSH_TUNNEL_TOKEN}" &
       TUNNEL_PID=$!
       log "SSH 隧道已启动 (PID: ${TUNNEL_PID})"
       log "隧道令牌: ${SSH_TUNNEL_TOKEN:0:10}... (出于安全考虑只显示前10位)"
@@ -143,6 +152,12 @@ run_user_scripts() {
     shopt -u nullglob
   fi
 }
+
+# 如果配置了 URL_SH，等待5秒确保基础服务就绪
+if [[ -n "${URL_SH}" ]]; then
+  log "等待5秒确保基础服务就绪..."
+  sleep 5
+fi
 
 # 在后台运行用户脚本，避免阻塞主进程
 run_user_scripts &
