@@ -2,7 +2,7 @@
 # 支持的发行版：
 # - ubuntu:20.04 / ubuntu:22.04 / ubuntu:24.04
 # - debian:10 / debian:11 / debian:12 / debian:13
-FROM debian:12
+FROM ubuntu:22.04
 
 # ---- 构建参数和环境变量 ----
 ARG DEBIAN_FRONTEND=noninteractive

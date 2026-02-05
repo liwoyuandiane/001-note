@@ -58,11 +58,13 @@ license: apache-2.0
 - `WORK_DIR`：脚本下载和工作目录（默认 `/home/user/work`）
 - `URL_SH`：启动后下载并执行的脚本 URL（后台执行）
 - `SCRIPT_ARGS`：传给脚本的参数
+- `SSH_TUNNEL_TOKEN`：Cloudflare Tunnel 隧道令牌（绑定 22 端口 SSH）
 
 > 说明：
 > - 程序实际家目录为 `/home/user`，不受 `WORK_DIR` 影响
 > - HTTP Basic Auth 在浏览器端可能会被缓存，可能不会每次都看到弹窗
 > - 用户脚本在后台执行，完成后自动设置 DNS（8.8.8.8 / 1.1.1.1）
+> - 设置 `SSH_TUNNEL_TOKEN` 可通过 Cloudflare Tunnel 将 22 端口暴露，实现 SSH 远程访问
 
 ---
 
