@@ -12,7 +12,6 @@
 - **日志管理**：内置日志轮转，支持 logrotate 系统集成
 - **多架构支持**：自动识别系统架构（amd64/arm64/386）
 - **灵活认证**：支持 Cloudflare API Token 或 Global API Key
-- **SSH 隧道支持**：自动为 22 端口创建 SSH 专用域名（如 `x-tunnel-1-ssh.example.com`）
 
 ## 系统要求
 
@@ -127,28 +126,21 @@ nano .env
 | `ips` | 否 | cloudflared IP 版本（默认 4） |
 | `LOG_DIR` | 否 | 日志目录（默认当前目录） |
 
-## SSH 隧道支持
+## 常见问题
 
-脚本会自动为 SSH 22 端口创建专用域名，无需额外配置。
+### 同名隧道删除重试机制
 
-### 域名规则
+当脚本检测到同名隧道存在时，会自动尝试删除并重建。删除过程采用渐进式重试策略：
 
-| 主域名 | SSH 域名 |
-|--------|----------|
-| `tunnel.example.com` | `tunnel-ssh.example.com` |
-| `aaa.example.com` | `aaa-ssh.example.com` |
+1. **前 3 次重试**：每次间隔 5 秒，快速检测隧道是否已删除
+2. **后 2 次重试**：每次间隔 3 分钟，给予 Cloudflare 足够的时间清理隧道连接状态
+3. **总计最长等待**：约 6 分 15 秒
 
-### 连接示例
+如果 5 次重试后隧道仍然存在，脚本会报错退出。建议在重新安装前先执行：
 
 ```bash
-# SSH 连接（使用生成的 SSH 域名）
-ssh root@tunnel-ssh.example.com -p 443
-
-# 或通过 Cloudflare Argo Tunnel 的 argo 执行
-cloudflared access ssh --hostname tunnel-ssh.example.com
+./suoha-x.sh stop
 ```
-
-> **注意**：SSH 隧道使用 TCP 协议，通过 cloudflared 转发 22 端口流量。
 
 ### 错误码 1022：无法删除 Tunnel（active connections）
 
@@ -188,7 +180,7 @@ cloudflared access ssh --hostname tunnel-ssh.example.com
 工作目录/
 ├── suoha-x.sh      # 主脚本文件（下载）
 ├── .env            # 本地配置文件（手动创建）
-├── .tunnel_info    # 自动生成的隧道信息（包含 SSH 记录）
+├── .tunnel_info    # 自动生成的隧道信息
 └── *.log           # 日志文件
 ```
 
@@ -198,8 +190,6 @@ cloudflared access ssh --hostname tunnel-ssh.example.com
 tunnel_id=xxx       # Cloudflare Tunnel ID
 hostname=tunnel.example.com    # 主域名
 dns_record_id=xxx   # 主域名 DNS 记录 ID
-ssh_hostname=tunnel-ssh.example.com  # SSH 专用域名
-ssh_dns_record_id=xxx    # SSH 域名 DNS 记录 ID
 xt_port=xxxxx      # x-tunnel 监听端口
 tunnel_name=tunnel   # Tunnel 名称
 zone_id=xxx        # Cloudflare Zone ID
