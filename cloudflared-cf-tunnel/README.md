@@ -1,206 +1,271 @@
-# x-tunnel
+# Cloudflare Tunnel 简化配置脚本
 
-一个自动化管理 Cloudflare Tunnel 的 Bash 脚本，用于快速部署 x-tunnel 服务并通过 Cloudflare Argo Tunnel 暴露到公网。
+将本地指定端口通过 Cloudflare Tunnel 快速绑定到域名，无需复杂的配置文件。
 
 ## 功能特性
 
-- **一键部署**：直接下载脚本，无需克隆整个仓库
-- **自动化安装**：自动安装依赖、下载二进制文件、配置并启动服务
-- **API 模式**：通过 Cloudflare API 自动创建固定隧道（Named Tunnel）
-- **智能端口管理**：自动检测空闲端口，动态配置 ingress 规则
-- **同名隧道处理**：检测到同名隧道时自动删除并重建（支持重试机制）
-- **日志管理**：内置日志轮转，支持 logrotate 系统集成
-- **多架构支持**：自动识别系统架构（amd64/arm64/386）
-- **灵活认证**：支持 Cloudflare API Token 或 Global API Key
+- 一键启动/停止/重启 Cloudflare Tunnel
+- 自动创建和配置隧道
+- 自动管理 DNS 记录
+- 进程锁机制，防止重复运行
+- 精确的进程管理（PID 追踪）
+- 安全的凭据存储（文件权限 600）
+- 完善的错误处理和重试机制
 
-## 系统要求
+## 环境要求
 
-- Linux 操作系统（Debian/Ubuntu/CentOS/RHEL/Alpine 等）
-- root 权限或 sudo 访问权限
-- 已注册 Cloudflare 账号并添加域名
+- Bash 4.0+
+- `curl` 命令
+- `jq`（可选，用于解析 JSON）
+- Linux/macOS 系统
 
 ## 快速开始
 
-### 1. 下载脚本并赋予执行权限
+### 一键下载并提权
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/x-tunnel/suoha-x.sh -o suoha-x.sh
-chmod +x suoha-x.sh
+curl -o cf-tunnel.sh https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/cloudflared-cf-tunnel/cf-tunnel.sh && chmod +x cf-tunnel.sh
 ```
 
-### 2. 创建并配置 .env 文件
-
-下载模板文件并重命名为 `.env`，然后编辑：
+### 启动隧道（命令行参数方式）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/liwoyuandiane/001-note/refs/heads/main/x-tunnel/.env.example -o .env
-nano .env
+./cf-tunnel.sh -e "your-email@example.com" \
+                -k "your-global-api-key" \
+                -d "sub.example.com" \
+                -n "my-tunnel" \
+                -p "8080" \
+                -c run
 ```
 
-填入你的 Cloudflare 认证信息和域名配置即可。
+### 访问服务
 
-### 3. 启动服务
+打开浏览器访问 `https://sub.example.com`，即可访问本地 `http://127.0.0.1:8080` 的服务。
+
+## 命令说明
+
+### 启动隧道
 
 ```bash
-./suoha-x.sh install -m api -e
+./cf-tunnel.sh -e "your-email@example.com" -k "your-global-api-key" -d "sub.example.com" -n "my-tunnel" -p "8080" -c run
 ```
 
-## 使用说明
-
-### 命令格式
+或使用环境变量方式：
 
 ```bash
-./suoha-x.sh <command> [options]
+export CF_EMAIL="your-email@example.com"
+export CF_GLOBAL_KEY="your-global-api-key"
+export DOMAIN="sub.example.com"
+export TUNNEL_NAME="my-tunnel"
+export LOCAL_PORT="8080"
+./cf-tunnel.sh run
 ```
 
-### 可用命令
+自动完成以下操作：
+- 下载 cloudflared（如不存在）
+- 停止现有服务（如运行中）
+- 查询 Zone ID 和 Account ID
+- 创建/重建隧道
+- 配置隧道路由规则
+- 创建/更新 DNS CNAME 记录
+- 启动 cloudflared 守护进程
 
-| 命令 | 说明 |
-|------|------|
-| `install` | 安装并启动服务 |
-| `stop` | 停止所有服务 |
-| `remove` | 卸载并清理所有资源 |
-| `status` | 查看服务运行状态 |
-
-### 参数选项
-
-| 选项 | 说明 |
-|------|------|
-| `-m, --mode` | 运行模式（仅支持 `api`） |
-| `-e, --env` | 从 `.env` 文件加载配置 |
-| `-z, --zone` | 指定 Cloudflare Zone |
-| `-d, --domain` | 指定绑定的域名 |
-| `-n, --name` | 指定 Tunnel 名称 |
-| `-p, --port` | 指定 x-tunnel 监听端口 |
-| `-i, --ips` | cloudflared IP 版本（4 或 6） |
-| `-x, --token` | x-tunnel 认证 token |
-| `-E, --email` | Cloudflare 邮箱 |
-| `-G, --global-key` | Cloudflare Global API Key |
-| `-T, --api-token` | Cloudflare API Token |
-| `-h, --help` | 显示帮助信息 |
-
-### 使用示例
+### 停止服务
 
 ```bash
-# 使用 .env 文件启动（推荐）
-./suoha-x.sh install -m api -e
-
-# 命令行直接指定参数（不使用 .env 文件）
-./suoha-x.sh install -m api \
-  -T "YOUR_API_TOKEN" \
-  -d "tunnel.example.com" \
-  -z "example.com" \
-  -n "my-tunnel"
-
-# 停止服务
-./suoha-x.sh stop
-
-# 查看状态
-./suoha-x.sh status
-
-# 完全卸载
-./suoha-x.sh remove
+./cf-tunnel.sh -c stop
 ```
 
-## 配置说明
-
-### Cloudflare API Token 权限要求
-
-创建 API Token 时需要以下权限：
-
-- **Account**: Cloudflare Tunnel (Edit)
-- **Zone**: DNS (Edit)
-
-### 环境变量说明
-
-| 变量名 | 必填 | 说明 |
-|--------|------|------|
-| `cf_api_token` | 二选一 | Cloudflare API Token（推荐） |
-| `cf_email` | 二选一 | Cloudflare 账号邮箱 |
-| `cf_global_key` | 二选一 | Cloudflare Global API Key |
-| `cf_domain` | 是 | 要绑定的完整域名 |
-| `cf_zone` | 强烈建议 | 域名所在的 Zone |
-| `cf_tunnel_name` | 是 | Tunnel 名称 |
-| `token` | 否 | x-tunnel 认证 token |
-| `port` | 否 | x-tunnel 监听端口（留空则自动分配） |
-| `ips` | 否 | cloudflared IP 版本（默认 4） |
-| `LOG_DIR` | 否 | 日志目录（默认当前目录） |
-
-## 常见问题
-
-### 同名隧道删除重试机制
-
-当脚本检测到同名隧道存在时，会自动尝试删除并重建。删除过程采用渐进式重试策略：
-
-1. **前 3 次重试**：每次间隔 5 秒，快速检测隧道是否已删除
-2. **后 2 次重试**：每次间隔 3 分钟，给予 Cloudflare 足够的时间清理隧道连接状态
-3. **总计最长等待**：约 6 分 15 秒
-
-如果 5 次重试后隧道仍然存在，脚本会报错退出。建议在重新安装前先执行：
+或
 
 ```bash
-./suoha-x.sh stop
+./cf-tunnel.sh stop
 ```
 
-### 错误码 1022：无法删除 Tunnel（active connections）
-
-当脚本检测到同名 Tunnel 时，会先尝试删除旧 Tunnel 再创建新的。如果 Cloudflare 返回 1022（提示 Cannot delete tunnel because it has active connections），说明该 Tunnel 仍被某个 cloudflared 实例认为"在线"，因此 Cloudflare 拒绝删除。
-
-**解决方法：**
-
-1. **先执行停止命令（推荐）：**
-   ```bash
-   ./suoha-x.sh stop
-   ```
-
-2. **如果仍然报错，手动执行 cleanup：**
-   ```bash
-   ./cloudflared-linux tunnel cleanup <TUNNEL_ID>
-   ```
-
-3. **cleanup 需要 origin certificate（cert.pem）**。若提示找不到 cert.pem，请先执行：
-   ```bash
-   ./cloudflared-linux tunnel login
-   ```
-   然后将证书放到默认路径（例如 `~/.cloudflared/cert.pem`），或通过 `--origincert` 或环境变量 `TUNNEL_ORIGIN_CERT` 指定证书路径。
-
-### 日志位置
-
-默认日志保存在脚本运行目录：
-
-- `x-tunnel.log` - x-tunnel 服务日志
-- `cloudflared.log` - cloudflared 日志
-- `opera.log` - opera 服务日志（如启用）
-
-可通过 `LOG_DIR` 环境变量自定义日志目录。
-
-## 项目文件
-
-```
-工作目录/
-├── suoha-x.sh      # 主脚本文件（下载）
-├── .env            # 本地配置文件（手动创建）
-├── .tunnel_info    # 自动生成的隧道信息
-└── *.log           # 日志文件
-```
-
-### .tunnel_info 文件内容
+### 重启服务
 
 ```bash
-tunnel_id=xxx       # Cloudflare Tunnel ID
-hostname=tunnel.example.com    # 主域名
-dns_record_id=xxx   # 主域名 DNS 记录 ID
-xt_port=xxxxx      # x-tunnel 监听端口
-tunnel_name=tunnel   # Tunnel 名称
-zone_id=xxx        # Cloudflare Zone ID
-account_id=xxx     # Cloudflare Account ID
+./cf-tunnel.sh -c restart
 ```
+
+或
+
+```bash
+./cf-tunnel.sh restart
+```
+
+### 查看状态
+
+```bash
+./cf-tunnel.sh -c status
+```
+
+或
+
+```bash
+./cf-tunnel.sh status
+```
+
+### 显示帮助
+
+```bash
+./cf-tunnel.sh -h
+```
+
+或
+
+```bash
+./cf-tunnel.sh --help
+```
+
+或
+
+```bash
+./cf-tunnel.sh help
+```
+
+## 参数说明
+
+### 命令行参数
+
+| 参数 | 短参数 | 说明 | 对应环境变量 |
+|------|--------|------|--------------|
+| `--email` | `-e` | Cloudflare 账户邮箱 | CF_EMAIL |
+| `--key` | `-k` | Cloudflare Global API Key | CF_GLOBAL_KEY |
+| `--domain` | `-d` | 要绑定的域名 | DOMAIN |
+| `--name` | `-n` | 隧道名称 | TUNNEL_NAME |
+| `--port` | `-p` | 本地监听端口 | LOCAL_PORT |
+| `--command` | `-c` | 执行的命令（run/stop/restart/status） | - |
+| `--help` | `-h` | 显示帮助 | - |
+
+### 环境变量
+
+| 参数 | 说明 | 获取方式 |
+|------|------|----------|
+| `CF_EMAIL` | Cloudflare 账户邮箱 | 登录 Cloudflare 面板 |
+| `CF_GLOBAL_KEY` | Global API Key | [获取链接](https://dash.cloudflare.com/profile/api-tokens) |
+| `DOMAIN` | 要绑定的域名 | 需已在 Cloudflare 托管 |
+| `TUNNEL_NAME` | 隧道名称 | 自定义，重复时自动重建 |
+| `LOCAL_PORT` | 本地监听端口 | 需确保本地服务已启动 |
+
+## 获取 API Key
+
+1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com)
+2. 点击右上角头像 → **My Profile**
+3. 选择 **API Tokens** 标签
+4. 在 **Global API Key** 区域点击 **View** 查看密钥
+
+## 使用示例
+
+### 示例 1：启动本地开发服务（命令行参数方式，推荐）
+
+```bash
+./cf-tunnel.sh -e "user@example.com" \
+                -k "xxxxxxxxxxxxxx" \
+                -d "dev.example.com" \
+                -n "dev-tunnel" \
+                -p "3000" \
+                -c run
+```
+
+访问 `https://dev.example.com` 即可访问本地 3000 端口。
+
+### 示例 2：启动本地开发服务（环境变量方式）
+
+```bash
+export CF_EMAIL="user@example.com"
+export CF_GLOBAL_KEY="xxxxxxxxxxxxxx"
+export DOMAIN="dev.example.com"
+export TUNNEL_NAME="dev-tunnel"
+export LOCAL_PORT="3000"
+./cf-tunnel.sh run
+```
+
+### 示例 3：一行命令启动
+
+```bash
+./cf-tunnel.sh -e "user@example.com" -k "xxxxxxxxxxxxxx" -d "app.example.com" -n "app-tunnel" -p "8080" -c run
+```
+
+### 示例 4：混合使用（部分参数通过命令行，部分通过环境变量）
+
+```bash
+export CF_EMAIL="user@example.com"
+export CF_GLOBAL_KEY="xxxxxxxxxxxxxx"
+./cf-tunnel.sh -d "app.example.com" -n "app-tunnel" -p "8080" -c run
+```
+
+### 示例 5：使用环境变量文件
+
+创建 `.env` 文件：
+
+```bash
+CF_EMAIL="user@example.com"
+CF_GLOBAL_KEY="xxxxxxxxxxxxxx"
+DOMAIN="myapp.example.com"
+TUNNEL_NAME="myapp"
+LOCAL_PORT="5000"
+```
+
+加载并运行：
+
+```bash
+set -a
+source .env
+set +a
+./cf-tunnel.sh run
+```
+
+## 生成的文件
+
+脚本运行后会生成以下文件：
+
+| 文件 | 说明 | 权限 |
+|------|------|------|
+| `.tunnel_info` | 隧道配置信息（包含敏感 token） | 600 |
+| `.tunnel_pid` | cloudflared 进程 PID | 644 |
+| `cloudflared` | Cloudflare Tunnel 客户端二进制 | 755 |
+
+**注意**：`.tunnel_info` 包含敏感信息，请妥善保管，不要提交到版本控制系统。
+
+## 故障排除
+
+### 隧道无法启动
+
+1. 检查本地服务是否运行：`curl http://127.0.0.1:端口号`
+2. 检查端口是否被占用：`./cf-tunnel.sh status`
+3. 查看 cloudflared 日志
+
+### DNS 记录未更新
+
+1. 确认域名已在 Cloudflare 托管
+2. 检查 API Key 是否正确
+3. 查看脚本输出中的错误信息
+
+### API 请求失败
+
+1. 确认 CF_EMAIL 和 CF_GLOBAL_KEY 正确
+2. 检查网络连接
+3. 确认 API Key 未过期
+
+### 脚本提示"脚本已在运行"
+
+1. 删除锁文件：`rm -f /tmp/cf-tunnel.lock`
+2. 重新运行脚本
+
+## 技术架构
+
+- **进程锁**：使用 `flock` 确保单实例运行
+- **进程管理**：通过 PID 文件精确控制进程
+- **并发安全**：锁机制防止多个实例同时操作
+- **错误重试**：隧道删除操作支持重试（默认 3 次）
+- **下载保护**：使用临时文件确保下载完整性
 
 ## 许可证
 
 MIT License
 
-## 致谢
+## 相关链接
 
-- [cloudflared](https://github.com/cloudflare/cloudflared) - Cloudflare 官方隧道客户端
-- [x-tunnel](https://www.baipiao.eu.org/) - x-tunnel 二进制分发
+- [Cloudflare Tunnel 文档](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/)
+- [cloudflared GitHub](https://github.com/cloudflare/cloudflared)
