@@ -41,8 +41,13 @@ OP_PATH=$(find / -name opencode -type f -printf '%h' -quit 2>/dev/null)
 export PATH="$OP_PATH:$PATH"
 
 log "=== [STEP 0] 从 Bucket 恢复数据 ==="
+START_TIME=$(date +%s)
+
 if hf sync "$BUCKET" "$SOURCE" -q 2>/dev/null; then
-    log "=== [STEP 0] 恢复完成 ==="
+    FILE_COUNT=$(find /home -type f 2>/dev/null | wc -l)
+    END_TIME=$(date +%s)
+    DURATION=$((END_TIME - START_TIME))
+    log "=== [STEP 0] 恢复完成（${FILE_COUNT} 个文件，耗时 ${DURATION} 秒）==="
 else
     log "=== [STEP 0] 恢复跳过 ==="
 fi
@@ -90,7 +95,25 @@ ram_watchdog() {
 }
 
 start_opencode
-sleep 10
+sleep 30
+
+# 启动后上传初始日志到 Bucket（使用 hf sync）
+LOG_DATE=$(date +%Y-%m-%d)
+
+# 创建临时目录并复制日志文件
+mkdir -p /tmp/log-upload
+[ -f "$OPENCODE_LOG_FILE" ] && cp "$OPENCODE_LOG_FILE" /tmp/log-upload/opencode-${LOG_DATE}.log
+[ -f "$STARTUP_LOG_FILE" ] && cp "$STARTUP_LOG_FILE" /tmp/log-upload/entrypoint-${LOG_DATE}.log
+
+# 使用 hf sync 上传到 bucket 的 /log/ 目录
+if [ -n "$(ls -A /tmp/log-upload 2>/dev/null)" ]; then
+    log "=== [STEP 1] 上传日志到 Bucket ==="
+    timeout 30 hf sync /tmp/log-upload "hf://buckets/${SPACE_ID}/log" -q 2>/dev/null || true
+    touch "${LOG_DIR}/entrypoint-uploaded"
+fi
+
+# 清理临时目录
+rm -rf /tmp/log-upload
 
 # 在后台运行 RAM 监控
 ram_watchdog &
@@ -98,26 +121,29 @@ ram_watchdog &
 log "=== [STEP 2] 启动智能同步（inotify + 30秒防抖）==="
 
 do_sync() {
-    # 同步文件到 bucket（添加 .local 排除保持与 inotifywait 一致）
+    # 同步文件到 bucket（排除 .opencode/node_modules, .local, 临时文件等）
     hf sync "$SOURCE" "$BUCKET" --delete --ignore-sizes -q \
-        --exclude "*.mdb,*.log,*/.cache/*,*/.npm/*,.check_for_update_done,rg,*/.local/*" \
+        --exclude "*.mdb,*.log,*/.cache/*,*/.npm/*,.check_for_update_done,rg,*/.local/*,*/.opencode/*" \
         2>/dev/null || true
     
-    # 上传 OpenCode 日志到 bucket
+    # 上传日志到 bucket（使用 hf sync）
     LOG_DATE=$(date +%Y-%m-%d)
-    LOG_NAME="opencode-${LOG_DATE}.log"
-    hf cp "$OPENCODE_LOG_FILE" "hf://buckets/${SPACE_ID}/log/${LOG_NAME}" -q 2>/dev/null || true
-    
-    # 上传 entrypoint 启动日志（只上传一次）
+    mkdir -p /tmp/log-sync
+    [ -f "$OPENCODE_LOG_FILE" ] && cp "$OPENCODE_LOG_FILE" /tmp/log-sync/opencode-${LOG_DATE}.log
     if [ -f "$STARTUP_LOG_FILE" ] && [ ! -f "${LOG_DIR}/entrypoint-uploaded" ]; then
-        hf cp "$STARTUP_LOG_FILE" "hf://buckets/${SPACE_ID}/log/entrypoint-${LOG_DATE}.log" -q 2>/dev/null || true
+        cp "$STARTUP_LOG_FILE" /tmp/log-sync/entrypoint-${LOG_DATE}.log
         touch "${LOG_DIR}/entrypoint-uploaded"
     fi
     
+    if [ -n "$(ls -A /tmp/log-sync 2>/dev/null)" ]; then
+        hf sync /tmp/log-sync "hf://buckets/${SPACE_ID}/log" -q 2>/dev/null || true
+    fi
+    rm -rf /tmp/log-sync
+    
     # 清理 1 个月前的旧日志
     OLD_DATE=$(date -d "30 days ago" +%Y-%m-%d)
-    hf rm "hf://buckets/${SPACE_ID}/log/opencode-${OLD_DATE}.log" -q 2>/dev/null || true
-    hf rm "hf://buckets/${SPACE_ID}/log/entrypoint-${OLD_DATE}.log" -q 2>/dev/null || true
+    hf buckets rm "hf://buckets/${SPACE_ID}/log/opencode-${OLD_DATE}.log" -q 2>/dev/null || true
+    hf buckets rm "hf://buckets/${SPACE_ID}/log/entrypoint-${OLD_DATE}.log" -q 2>/dev/null || true
 }
 
 LAST_SYNC=0
@@ -129,9 +155,9 @@ while true; do
         exit 1
     fi
 
-    # 等待文件变更（排除 .mdb, .log, .cache, .npm, .local 等）
+    # 等待文件变更（排除 .opencode, .local, .cache, .npm 等）
     inotifywait -r -e modify,create,delete,move,attrib \
-        --exclude '(\.mdb$|\.log$|/\.cache/|/\.npm/|_check_for_update_done$|.*/rg$|/\.local/)' \
+        --exclude '(\.mdb$|\.log$|/\.cache/|/\.npm/|/\.opencode/|_check_for_update_done$|.*/rg$|/\.local/)' \
         -q "$SOURCE"
 
     # 防抖：30 秒后才执行同步

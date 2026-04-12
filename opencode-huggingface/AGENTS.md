@@ -35,7 +35,7 @@ Set in Space Settings → Secrets and variables:
 ## Sync Exclusions
 
 ```bash
---exclude "*.mdb,*.log,*/.cache/*,*/.npm/*,.check_for_update_done,rg,*/.local/*"
+--exclude "*.mdb,*.log,*/.cache/*,*/.npm/*,.check_for_update_done,rg,*/.local/*,*/.opencode/*"
 ```
 
 ## Development Notes
