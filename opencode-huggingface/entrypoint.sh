@@ -1,67 +1,77 @@
 #!/bin/bash
 
-# 确保 HF CLI 在 PATH 中
 export PATH="$HOME/.local/bin:$PATH"
-
-# 从 Space Secrets 设置 HF Token
 export HF_TOKEN="${HF_TOKEN}"
+
+# 日志级别配置（默认 warning，可选 debug/info/warning）
+LOG_LEVEL="${LOG_LEVEL:-warning}"
+export HF_HUB_VERBOSITY="$LOG_LEVEL"
+[ "$LOG_LEVEL" = "debug" ] && export HF_DEBUG=1
+
+# 日志级别辅助函数
+is_debug()  { [ "$LOG_LEVEL" = "debug" ]; }
+is_verbose() { [ "$LOG_LEVEL" = "info" ] || [ "$LOG_LEVEL" = "debug" ]; }
 
 # 变量
 SPACE_ID="${HF_SPACE}"
 BUCKET="hf://buckets/${SPACE_ID}/home"
 SOURCE='/home'
 
-# 持久化日志目录
 mkdir -p /home/.opencode/logs
 LOG_DIR="/home/.opencode/logs"
 OPENCODE_LOG_FILE="${LOG_DIR}/opencode.log"
 
-# 启动日志文件
 LOG_DATE=$(date +%Y-%m-%d)
 STARTUP_LOG_FILE="/tmp/entrypoint-${LOG_DATE}.log"
 
-# 日志函数：同时输出到终端和文件
-log() {
-    echo "$@" | tee -a "$STARTUP_LOG_FILE"
-}
+log() { echo "$@" | tee -a "$STARTUP_LOG_FILE"; }
 
-# 配置 Git
 git config --global user.email 'badal@example.com'
 git config --global user.name 'Badal'
 
 log "=== [STEP -1] 创建 Bucket ==="
-if hf buckets create "$SPACE_ID" 2>/dev/null; then
-    log "=== [STEP -1] Bucket 已创建 ==="
-else
-    log "=== [STEP -1] Bucket 已存在 ==="
-fi
+hf buckets create "$SPACE_ID" 2>/dev/null && log "=== [STEP -1] Bucket 已创建 ===" || log "=== [STEP -1] Bucket 已存在 ==="
 
-# 设置 OpenCode 路径
 OP_PATH=$(find / -name opencode -type f -printf '%h' -quit 2>/dev/null)
 export PATH="$OP_PATH:$PATH"
 
+# ============================================
+# STEP 0: 从 Bucket 恢复数据
+# ============================================
 log "=== [STEP 0] 从 Bucket 恢复数据 ==="
+is_verbose && log "正在从 bucket 恢复文件..."
+
 START_TIME=$(date +%s)
+RETRY_COUNT=0
+MAX_RETRIES=3
 
-if hf sync "$BUCKET" "$SOURCE" -q 2>/dev/null; then
-    FILE_COUNT=$(find /home -type f 2>/dev/null | wc -l)
-    END_TIME=$(date +%s)
-    DURATION=$((END_TIME - START_TIME))
-    log "=== [STEP 0] 恢复完成（${FILE_COUNT} 个文件，耗时 ${DURATION} 秒）==="
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    if is_debug; then
+        hf sync "$BUCKET" "$SOURCE" 2>&1 | while read -r line; do log "  $line"; done
+    else
+        hf sync "$BUCKET" "$SOURCE" -q 2>/dev/null
+    fi
+    SYNC_EXIT=$?
+    
+    [ $SYNC_EXIT -eq 0 ] && break
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    is_debug && log "DEBUG: 恢复失败，重试 ($RETRY_COUNT/$MAX_RETRIES)，退出码: $SYNC_EXIT"
+    [ $RETRY_COUNT -lt $MAX_RETRIES ] && sleep 5
+done
+
+if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+    log "=== [STEP 0] 恢复失败（已重试 $MAX_RETRIES 次）==="
 else
-    log "=== [STEP 0] 恢复跳过 ==="
+    FILE_COUNT=$(find /home -type f 2>/dev/null | wc -l)
+    DURATION=$(($(date +%s) - START_TIME))
+    log "=== [STEP 0] 恢复完成（${FILE_COUNT} 个文件，耗时 ${DURATION} 秒）==="
 fi
 
-# 自动创建 /home/user 目录
-if [ ! -d "/home/user" ]; then
-    log "=== 创建 /home/user 文件夹 ==="
-    mkdir -p /home/user
-fi
+[ ! -d "/home/user" ] && mkdir -p /home/user
 
 # ============================================
 # STEP 1: 启动 OpenCode（带 RAM 监控）
 # ============================================
-
 RAM_LIMIT_KB=$((14 * 1024 * 1024))
 
 start_opencode() {
@@ -97,36 +107,36 @@ ram_watchdog() {
 start_opencode
 sleep 30
 
-# 启动后上传初始日志到 Bucket（使用 hf sync）
-LOG_DATE=$(date +%Y-%m-%d)
-
-# 创建临时目录并复制日志文件
+# 上传初始日志到 Bucket
 mkdir -p /tmp/log-upload
 [ -f "$OPENCODE_LOG_FILE" ] && cp "$OPENCODE_LOG_FILE" /tmp/log-upload/opencode-${LOG_DATE}.log
 [ -f "$STARTUP_LOG_FILE" ] && cp "$STARTUP_LOG_FILE" /tmp/log-upload/entrypoint-${LOG_DATE}.log
 
-# 使用 hf sync 上传到 bucket 的 /log/ 目录
 if [ -n "$(ls -A /tmp/log-upload 2>/dev/null)" ]; then
-    log "=== [STEP 1] 上传日志到 Bucket ==="
-    timeout 30 hf sync /tmp/log-upload "hf://buckets/${SPACE_ID}/log" -q 2>/dev/null || true
+    is_verbose && log "正在上传日志到 bucket..."
+    if is_debug; then
+        timeout 30 hf sync /tmp/log-upload "hf://buckets/${SPACE_ID}/log" 2>&1 | while read -r line; do log "  $line"; done
+    else
+        timeout 30 hf sync /tmp/log-upload "hf://buckets/${SPACE_ID}/log" -q 2>/dev/null || true
+    fi
     touch "${LOG_DIR}/entrypoint-uploaded"
 fi
-
-# 清理临时目录
 rm -rf /tmp/log-upload
 
-# 在后台运行 RAM 监控
 ram_watchdog &
 
 log "=== [STEP 2] 启动智能同步（inotify + 30秒防抖）==="
 
 do_sync() {
-    # 同步文件到 bucket（排除 .opencode/node_modules, .local, 临时文件等）
-    hf sync "$SOURCE" "$BUCKET" --delete --ignore-sizes -q \
-        --exclude "*.mdb,*.log,*/.cache/*,*/.npm/*,.check_for_update_done,rg,*/.local/*,*/.opencode/*" \
-        2>/dev/null || true
+    EXCLUDE="*.mdb,*.log,*/.cache/*,*/.npm/*,.check_for_update_done,rg,*/.local/*,*/.opencode/*"
     
-    # 上传日志到 bucket（使用 hf sync）
+    if is_debug; then
+        hf sync "$SOURCE" "$BUCKET" --delete --ignore-sizes --exclude "$EXCLUDE" 2>&1 | while read -r line; do log "  $line"; done
+    else
+        hf sync "$SOURCE" "$BUCKET" --delete --ignore-sizes -q --exclude "$EXCLUDE" 2>/dev/null || true
+    fi
+    
+    # 上传日志到 bucket
     LOG_DATE=$(date +%Y-%m-%d)
     mkdir -p /tmp/log-sync
     [ -f "$OPENCODE_LOG_FILE" ] && cp "$OPENCODE_LOG_FILE" /tmp/log-sync/opencode-${LOG_DATE}.log
@@ -135,12 +145,12 @@ do_sync() {
         touch "${LOG_DIR}/entrypoint-uploaded"
     fi
     
-    if [ -n "$(ls -A /tmp/log-sync 2>/dev/null)" ]; then
-        hf sync /tmp/log-sync "hf://buckets/${SPACE_ID}/log" -q 2>/dev/null || true
-    fi
+    [ -n "$(ls -A /tmp/log-sync 2>/dev/null)" ] && {
+        is_debug && { hf sync /tmp/log-sync "hf://buckets/${SPACE_ID}/log" 2>&1 | while read -r line; do log "  $line"; done; } || hf sync /tmp/log-sync "hf://buckets/${SPACE_ID}/log" -q 2>/dev/null
+    }
     rm -rf /tmp/log-sync
     
-    # 清理 1 个月前的旧日志
+    # 清理 30 天前的旧日志
     OLD_DATE=$(date -d "30 days ago" +%Y-%m-%d)
     hf buckets rm "hf://buckets/${SPACE_ID}/log/opencode-${OLD_DATE}.log" -q 2>/dev/null || true
     hf buckets rm "hf://buckets/${SPACE_ID}/log/entrypoint-${OLD_DATE}.log" -q 2>/dev/null || true
@@ -149,23 +159,12 @@ do_sync() {
 LAST_SYNC=0
 
 while true; do
-    # 检查 OpenCode 是否仍在运行
-    if ! pgrep -f 'opencode' > /dev/null; then
-        log '严重错误：OpenCode 进程已退出！容器退出...'
-        exit 1
-    fi
+    pgrep -f 'opencode' > /dev/null || { log '严重错误：OpenCode 进程已退出！容器退出...'; exit 1; }
 
-    # 等待文件变更（排除 .opencode, .local, .cache, .npm 等）
     inotifywait -r -e modify,create,delete,move,attrib \
         --exclude '(\.mdb$|\.log$|/\.cache/|/\.npm/|/\.opencode/|_check_for_update_done$|.*/rg$|/\.local/)' \
         -q "$SOURCE"
 
-    # 防抖：30 秒后才执行同步
-    NOW=$(date +%s)
-    DIFF=$((NOW - LAST_SYNC))
-
-    if [ "$DIFF" -ge 30 ]; then
-        do_sync
-        LAST_SYNC=$(date +%s)
-    fi
+    DIFF=$(($(date +%s) - LAST_SYNC))
+    [ $DIFF -ge 30 ] && { do_sync; LAST_SYNC=$(date +%s); }
 done

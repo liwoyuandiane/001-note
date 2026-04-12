@@ -13,9 +13,10 @@ Set in Space Settings → Secrets and variables:
 | Secret | Usage |
 |--------|-------|
 | `HF_TOKEN` | HuggingFace API token for bucket sync |
-| `HF_SPACE` | Space name (e.g., `jerecom/opencode-xxx`) for bucket sync |
+| `HF_SPACE` | Space name (e.g., `awddwasd/OpencodeAI`) for bucket sync |
 | `OPENCODE_SERVER_USERNAME` | OpenCode web UI login username |
 | `OPENCODE_SERVER_PASSWORD` | OpenCode web UI login password |
+| `LOG_LEVEL` | Logging level: `debug`/`info`/`warning`/`error` (optional, default: warning) |
 
 ## Runtime Flow
 
