@@ -12,35 +12,46 @@ Set in Space Settings → Secrets and variables:
 
 | Secret | Usage |
 |--------|-------|
-| `HF_TOKEN` | HuggingFace API token for bucket sync |
-| `HF_SPACE` | Space name (e.g., `awddwasd/OpencodeAI`) for bucket sync |
 | `OPENCODE_SERVER_USERNAME` | OpenCode web UI login username |
 | `OPENCODE_SERVER_PASSWORD` | OpenCode web UI login password |
-| `LOG_LEVEL` | Logging level: `debug`/`info`/`warning`/`error` (optional, default: warning) |
+| `LOG_LEVEL` | Logging level: `debug`/`info`/`warning` (optional, default: warning) |
+
+## Persistent Storage
+
+**Important**: Need to mount HuggingFace bucket to `/home` directory for persistent storage.
+
+In Space Settings → Repo:
+- Set Persistent Storage path to `/home`
 
 ## Runtime Flow
 
-1. **STEP -1**: Create bucket (if not exists) named after current Space
-2. **STEP 0**: Restore from bucket → `/home`
-3. **STEP 1**: Start OpenCode (14GB RAM limit, auto-restart on OOM)
-4. **STEP 2**: Watch filesystem with inotify, sync back to bucket (30s debounce)
+1. 设置 DNS（运行时）
+2. 创建日志目录 `/home/.opencode/logs`
+3. 启动 OpenCode（带 RAM 监控，14GB 限制）
+4. 监控 OpenCode 进程，异常退出时自动重启
 
 ## Key Files
 
-- `/home` - User workspace (synced to bucket)
-- `/home/.opencode/logs` - Persistent logs (opencode.log, entrypoint.log)
-- `/entrypoint.sh` - Startup orchestration
-- `/Dockerfile` - Container definition
-- **BUCKET**: `hf://buckets/{space-id}/home` (保持完整路径)
+- `/home` - HuggingFace bucket 挂载目录（持久化存储）
+- `/home/.opencode/logs` - 日志目录
+- `/entrypoint.sh` - 启动脚本
+- `/Dockerfile` - 容器定义
 
-## Sync Exclusions
+## Log Level
 
-```bash
---exclude "*.mdb,*.log,*/.cache/*,*/.npm/*,.check_for_update_done,rg,*/.local/*,*/.opencode/*"
-```
+| LOG_LEVEL | 效果 |
+|-----------|------|
+| `warning`（默认） | 只显示步骤标题 |
+| `info` | 显示步骤 + 备份完成信息 |
+| `debug` | 显示详细：备份文件列表 |
+
+## Log Rotation
+
+- 日志文件超过 100MB 自动轮转
+- 轮转后的日志文件保存为 `entrypoint-YYYY-MM-DD.log`
 
 ## Development Notes
 
-- Logs moved to persistent directory `/home/.opencode/logs` - survives container restart
-- Entrypoint log uploaded only once (tracked by `entrypoint-uploaded` flag file)
-- All exclusion patterns unified between hf sync and inotifywait
+- 数据持久化：`/home` 由 HuggingFace bucket 挂载
+- 日志位置：`/home/.opencode/logs/`
+- RAM 限制：14GB，超限自动重启
