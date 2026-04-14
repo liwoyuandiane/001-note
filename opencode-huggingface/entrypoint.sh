@@ -5,14 +5,12 @@ echo "nameserver 8.8.8.8" > /tmp/resolv.conf
 echo "nameserver 8.8.4.4" >> /tmp/resolv.conf
 cp /tmp/resolv.conf /etc/resolv.conf 2>/dev/null || true
 
-export PATH="$HOME/.local/bin:$PATH"
-
 # 日志级别配置（默认 warning，可选 debug/info/warning）
 LOG_LEVEL="${LOG_LEVEL:-warning}"
 
-# 创建日志目录（/home/.opencode/logs 由 bucket 挂载）
-mkdir -p /home/.opencode/logs
-LOG_DIR='/home/.opencode/logs'
+# 创建日志目录（/root/.opencode/logs 由 bucket 挂载）
+mkdir -p /root/.opencode/logs
+LOG_DIR='/root/.opencode/logs'
 LOG_MAX_SIZE=104857600  # 100MB
 
 log() {
@@ -44,13 +42,15 @@ log() {
             ;;
     esac
     
-    # 额外过滤：只显示重要日志到控制台
-    local is_important=false
-    [ "$level" = "error" ] && is_important=true
-    [ "$level" = "warning" ] && is_important=true
+    # 额外过滤：控制台输出级别
+    local show_on_console=false
+    [ "$level" = "error" ] && show_on_console=true
+    [ "$level" = "warning" ] && show_on_console=true
+    # debug 级别也显示到控制台（方便调试）
+    [ "$LOG_LEVEL" = "debug" ] && [ "$level" = "debug" ] && show_on_console=true
     
     TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-    if [ "$is_important" = true ]; then
+    if [ "$show_on_console" = true ]; then
         echo "[$TIMESTAMP] [$level] $message" | tee -a "$LOG_DIR/entrypoint.log"
     else
         echo "[$TIMESTAMP] $message" >> "$LOG_DIR/entrypoint.log"
@@ -59,11 +59,8 @@ log() {
 
 OPENCODE_LOG_FILE="${LOG_DIR}/opencode.log"
 
-# 设置 OpenCode 路径
-OP_PATH=$(find / -name opencode -type f -printf '%h' -quit 2>/dev/null)
-if [ -n "$OP_PATH" ]; then
-    export PATH="$OP_PATH:$PATH"
-fi
+# 设置 OpenCode 路径（npm 安装后已在 PATH 中）
+export PATH="/root/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 # ============================================
 # 启动 OpenCode（带 RAM 监控）
@@ -73,6 +70,7 @@ RAM_CHECK_INTERVAL=30
 
 start_opencode() {
     log info "=== 启动 OpenCode ==="
+    log debug "执行命令: opencode serve --port 7860 --hostname 0.0.0.0"
     export OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
     export OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
     opencode serve --port 7860 --hostname 0.0.0.0 > "$OPENCODE_LOG_FILE" 2>&1 &

@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装 OpenCode
-RUN curl -fsSL https://opencode.ai/install | bash
+RUN npm i -g opencode-ai
 
 # 创建目录
 RUN mkdir -p /home && chmod 777 /home

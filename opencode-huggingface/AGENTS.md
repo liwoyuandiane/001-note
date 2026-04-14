@@ -18,22 +18,22 @@ Set in Space Settings → Secrets and variables:
 
 ## Persistent Storage
 
-**Important**: Need to mount HuggingFace bucket to `/home` directory for persistent storage.
+**Important**: Need to mount HuggingFace bucket to `/root` directory for persistent storage.
 
 In Space Settings → Repo:
-- Set Persistent Storage path to `/home`
+- Set Persistent Storage path to `/root`
 
 ## Runtime Flow
 
 1. 设置 DNS（运行时）
-2. 创建日志目录 `/home/.opencode/logs`
+2. 创建日志目录 `/root/.opencode/logs`
 3. 启动 OpenCode（带 RAM 监控，14GB 限制）
 4. 监控 OpenCode 进程，异常退出时自动重启
 
 ## Key Files
 
-- `/home` - HuggingFace bucket 挂载目录（持久化存储）
-- `/home/.opencode/logs` - 日志目录
+- `/root` - HuggingFace bucket 挂载目录（持久化存储）
+- `/root/.opencode/logs` - 日志目录
 - `/entrypoint.sh` - 启动脚本
 - `/Dockerfile` - 容器定义
 
@@ -41,9 +41,9 @@ In Space Settings → Repo:
 
 | LOG_LEVEL | 效果 |
 |-----------|------|
-| `warning`（默认） | 只显示步骤标题 |
-| `info` | 显示步骤 + 备份完成信息 |
-| `debug` | 显示详细：备份文件列表 |
+| `warning`（默认） | 只显示 warning/error |
+| `info` | + info 日志 |
+| `debug` | + 详细调试信息（RAM 使用率） |
 
 ## Log Rotation
 
@@ -52,6 +52,6 @@ In Space Settings → Repo:
 
 ## Development Notes
 
-- 数据持久化：`/home` 由 HuggingFace bucket 挂载
-- 日志位置：`/home/.opencode/logs/`
+- 数据持久化：`/root` 由 HuggingFace bucket 挂载
+- 日志位置：`/root/.opencode/logs/`
 - RAM 限制：14GB，超限自动重启
